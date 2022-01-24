@@ -1,0 +1,1969 @@
+{
+    "vendor_identifier": "Aruba ClearPass",
+    "version": "4.0",
+    "name": "Aruba ClearPass Assets",
+    "content_type": "application/json",
+    "type": "REST_EVENT",
+    "event_type": [
+        "LEASE",
+        "FIXED_ADDRESS_IPV4",
+        "HOST_ADDRESS_IPV4",
+        "FIXED_ADDRESS_IPV6",
+        "HOST_ADDRESS_IPV6"
+    ],
+    "headers": {
+        "Accept": "*/*"
+    },
+    "instance_variables": [
+    ],
+    "steps": [
+        {
+            "name": "Debug#0",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{H:}}${XC:DEBUG:{E:}}${XC:DEBUG:{I:}}${XC:DEBUG:{L:}}${XC:DEBUG:{S:}}${XC:DEBUG:{P:}}${XC:DEBUG:{R:}}${XC:DEBUG:{RH:}}${XC:DEBUG:{UT:}}"
+        },
+       
+        {
+            "name": "check if lease",
+            "operation": "CONDITION",
+            "condition": {
+                "statements": [
+                    {
+                        "left": "${E:A:event_type}",
+                        "op": "==",
+                        "right": "LEASE"
+                    }
+                ],
+                "eval": "${XC:COPY:{L:address}:{E:address}}",
+                "next": "Check if name is unknown",
+                "condition_type": "OR"
+            }
+        },
+        {
+            "name": "checkEventTypeFixed",
+            "comment": "Check FIXED event type.",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "${E:A:event_type}",
+                    "op": "=~",
+                    "right": "FIXED"
+                }],
+                "eval": "${XC:ASSIGN:{L:operating_system}:{S:}}",
+                "else_eval": "${XC:ASSIGN:{L:operating_system}:{S:}}${XC:ASSIGN:{L:Path}:{S:record:host}}",
+                "else_next": "assignLVarsNet from E:"
+            }
+        },
+        {
+            "name": "checkFixedIPvType",
+            "comment": "IPv4 and IPv6 Fixed events have different API paths than hosts for GETTING info, so we need that string.",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "${E:A:event_type}",
+                    "op": "=~",
+                    "right": "IPV6"
+                }],
+                "eval": "${XC:ASSIGN:{L:Path}:{S:ipv6fixedaddress}}",
+                "else_eval": "${XC:ASSIGN:{L:Path}:{S:fixedaddress}}"
+            }
+        },
+        {
+            "name": "assignLVarsNet from E:",
+            "operation": "NOP",
+            "body_list": [
+                "${XC:COPY:{L:timestamp}:{E:timestamp}}",
+                "${XC:COPY:{L:network_view}:{E:values{network_view}}}"
+            ]
+        },
+        {
+            "name": "check if IPv4 or IPv6 for assigning variables",
+            "operation": "CONDITION",
+            "condition": {
+                "statements": [
+                    {
+                        "left": "${E:A:values{ipv4addr}}",
+                        "op": "!=",
+                        "right": ""
+                    }
+                ],
+                "condition_type": "AND",
+                "eval": "${XC:COPY:{L:address}:{E:values{ipv4addr}}}${XC:ASSIGN:{L:addr}:{S:ipv4addr}}${XC:ASSIGN:{L:fixed}:{S:fixedaddress}}",
+                "else_eval": "${XC:COPY:{L:address}:{E:values{ipv6addr}}}${XC:ASSIGN:{L:addr}:{S:ipv6addr}}${XC:ASSIGN:{L:fixed}:{S:ipv6fixedaddress}}"
+            }
+        },
+        
+        {
+            "name": "assignTimeValue",
+            "operation": "NOP",
+            "body_list": [
+                "${XC:COPY:{L:ArubaAddDate}:{UT:TIME}}${XC:FORMAT:TRUNCATE:{L:ArubaAddDate}:{16t}}"
+            ]
+        },
+        {
+            "name": "Set Old_Time",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "OR",
+                "statements": [
+                    {
+                        "left": "${E:A:values{extattrs}{Aruba_SyncedAt}{value}}",
+                        "op": "==",
+                        "right": ""
+                    }
+                ],
+                "eval": "${XC:ASSIGN:{L:ArubaAddDateRecorded}:{S:}}",
+                "else_eval": "${XC:COPY:{L:ArubaAddDateRecorded}:{E:values{extattrs}{Aruba_SyncedAt}{value}}}${XC:FORMAT:TRUNCATE:{L:ArubaAddDateRecorded}:{16t}}"
+            }
+        },
+        {
+            "name": "check If Scan Happened today",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "OR",
+                "statements": [
+                    {
+                        "left": "${E:A:values{extattrs}{Aruba_Sync}{value}}",
+                        "op": "==",
+                        "right": "false"
+                    },
+                    {
+                        "left": "${L:A:ArubaAddDateRecorded}",
+                        "op": "==",
+                        "right": "${L:A:ArubaAddDate}"
+                    }
+                ],
+                "stop": true
+            }
+        },
+        
+        {
+            "name": "all discovery information",
+            "operation": "GET",
+            "transport": {
+                "path": "${L:A:Path}?${L:A:addr}=${L:A:address}&_return_fields=comment,device_description,device_location,device_type,device_vendor,name"
+            },
+            "wapi": "v2.7",
+            "parse": "JSON"
+        },
+      
+        {
+            "name": "Check if name is unknown",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "OR",
+                "statements": [
+                    {
+                        "left": "${P:A:PARSE[0]{name}}",
+                        "op": "==",
+                        "right": ""
+                    },
+                    {
+                        "left": "${P:A:PARSE[0]{name}}",
+                        "op": "==",
+                        "right": "unknown"
+                    }
+                ],
+                "eval": "${XC:ASSIGN:{L:name}:{S:Unknown}}",
+                "else_eval": "${XC:COPY:{L:name}:{P:PARSE[0]{name}}}"
+            }
+        },
+
+        {
+            "name": "check for description",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${P:A:PARSE[0]{device_description}}",
+                        "op": "==",
+                        "right": ""
+                    }
+                ],
+                "eval": "${XC:ASSIGN:{L:description}:{S:No Description}}",
+                "else_eval": "${XC:COPY:{L:description}:{P:PARSE[0]{device_description}}}"
+            }
+        },
+        {
+            "name": "check for comment",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${P:A:PARSE[0]{comment}}",
+                        "op": "==",
+                        "right": ""
+                    }
+                ],
+                "eval": "${XC:ASSIGN:{L:comment}:{S:No Comment}}",
+                "else_eval": "${XC:COPY:{L:comment}:{P:PARSE[0]{comment}}}"
+            }
+        },
+        {
+            "name": "check for vendor",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${P:A:PARSE[0]{device_vendor}}",
+                        "op": "==",
+                        "right": ""
+                    }
+                ],
+                "eval": "${XC:ASSIGN:{L:vendor}:{S:Unknown}}",
+                "else_eval": "${XC:COPY:{L:vendor}:{P:PARSE[0]{device_vendor}}}"
+            }
+        },
+        {
+            "name": "check for type",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${P:A:PARSE[0]{device_type}}",
+                        "op": "==",
+                        "right": ""
+                    }
+                ],
+                "eval": "${XC:ASSIGN:{L:type}:{S:Unknown}}",
+                "else_eval": "${XC:COPY:{L:type}:{P:PARSE[0]{device_type}}}"
+            }
+        },
+        {
+            "name": "check for location EA",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${E:A:values{extattrs}{Aruba_Location}{value}}",
+                        "op": "==",
+                        "right": ""
+                    }
+                ],
+                "eval": "${XC:ASSIGN:{L:Location}:{S:Unknown}}",
+                "else_eval": "${XC:COPY:{L:Location}:{E:values{extattrs}{Aruba_Location}{value}}}",
+                "else_next": "check if lease to jump to lease event"
+            }
+        },
+        {
+            "name": "check for location",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${P:A:PARSE[0]{device_location}}",
+                        "op": "==",
+                        "right": ""
+                    }
+                ],
+                "eval": "${XC:ASSIGN:{L:Location}:{S:Unknown}}",
+                "else_eval": "${XC:COPY:{L:Location}:{P:PARSE[0]{device_location}}}"
+            }
+        },
+       
+        {
+            "name": "check if lease to jump to lease event",
+            "operation": "CONDITION",
+            "condition": {
+                "statements": [
+                    {
+                        "left": "${E:A:event_type}",
+                        "op": "==",
+                        "right": "LEASE"
+                    }
+                ],
+                "condition_type": "AND",
+                "next": "Check if Lease is wanted"
+            }
+        },
+        {
+            "name": "stop add if Asset is not wanted",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "OR",
+                "statements": [
+                    {
+                        "left": "${E:A:values{extattrs}{Aruba_Sync}{value}}",
+                        "op": "!=",
+                        "right": "true"
+                    }
+                ],
+                "stop": true
+            }
+        },
+        {
+            "name": "checkHostFixedDelete",
+            "comment": "check for Host or Fixed IPv4 DELETE, if true jump to Delete code",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${E:A:operation_type}",
+                        "op": "==",
+                        "right": "DELETE"
+                    },
+                    {
+                        "left": "${L:A:addr}",
+                        "op": "==",
+                        "right": "ipv4addr"
+                    }
+                ],
+                "next": "GetMACforDelete"
+            }
+        },
+        {
+            "name": "Debug#11",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{H:}}${XC:DEBUG:{E:}}${XC:DEBUG:{I:}}${XC:DEBUG:{L:}}${XC:DEBUG:{S:}}${XC:DEBUG:{P:}}${XC:DEBUG:{R:}}${XC:DEBUG:{RH:}}${XC:DEBUG:{UT:}}"
+        },
+        {
+            "name": "check if host",
+            "operation": "CONDITION",
+            "condition": {
+                "statements": [
+                    {
+                        "left": "${E:A:event_type}",
+                        "op": "=~",
+                        "right": "HOST"
+                    }
+                ],
+                "condition_type": "AND",
+                "next": "check if IPv4 or IPv6 for host"
+            }
+        },
+        {
+            "name": "Debug#13",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{H:}}${XC:DEBUG:{E:}}${XC:DEBUG:{I:}}${XC:DEBUG:{L:}}${XC:DEBUG:{S:}}${XC:DEBUG:{P:}}${XC:DEBUG:{R:}}${XC:DEBUG:{RH:}}${XC:DEBUG:{UT:}}"
+        },
+        {
+            "name": "check if IPv4 or IPv6",
+            "operation": "CONDITION",
+            "condition": {
+                "statements": [
+                    {
+                        "left": "${L:A:addr}",
+                        "op": "==",
+                        "right": "ipv6addr"
+                    }
+                ],
+                "condition_type": "AND",
+                "next": "Get Fixed IPv6 Mac"
+            }
+        },
+        {
+            "name": "Get Fixed IPv4 Mac",
+            "operation": "GET",
+            "parse": "JSON",
+            "transport": {
+                "path": "${E:A:values{_ref}}?_return_fields=mac,discovered_data.mac_address,discovered_data.vmhost_mac_address,discovered_data.vport_mac_address"
+            },
+            "wapi": "v2.7",
+            "result": [{
+                "codes": "200,201,202,203,204",
+                "next": "check if mac is present"
+            }]
+        },
+        {
+            "name": "Debug#15",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{H:}}${XC:DEBUG:{E:}}${XC:DEBUG:{I:}}${XC:DEBUG:{L:}}${XC:DEBUG:{S:}}${XC:DEBUG:{P:}}${XC:DEBUG:{R:}}${XC:DEBUG:{RH:}}${XC:DEBUG:{UT:}}"
+        },
+        {
+            "name": "Get Fixed IPv6 Mac",
+            "operation": "GET",
+            "parse": "JSON",
+            "transport": {
+                "path": "${E:A:values{_ref}}?_return_fields=discovered_data.mac_address,discovered_data.vmhost_mac_address,discovered_data.vport_mac_address"
+            },
+            "wapi": "v2.7",
+            "result": [{
+                "codes": "200,201,202,203,204",
+                "next": "check if mac is present"
+            }]
+        },
+        {
+            "name": "Debug#16",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{H:}}${XC:DEBUG:{E:}}${XC:DEBUG:{I:}}${XC:DEBUG:{L:}}${XC:DEBUG:{S:}}${XC:DEBUG:{P:}}${XC:DEBUG:{R:}}${XC:DEBUG:{RH:}}${XC:DEBUG:{UT:}}"
+        },
+        {
+            "name": "check if mac is present",
+            "operation": "CONDITION",
+            "condition": {
+                "statements": [
+                    {
+                        "left": "${P:A:mac}",
+                        "op": "!=",
+                        "right": ""
+                    }
+                ],
+                "condition_type": "AND",
+                "eval": "${XC:COPY:{L:mac}:{P:mac}}",
+                "next": "assignMac from L: for fixed"
+            }
+        },
+        {
+            "name": "Debug#17",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{H:}}${XC:DEBUG:{E:}}${XC:DEBUG:{I:}}${XC:DEBUG:{L:}}${XC:DEBUG:{S:}}${XC:DEBUG:{P:}}${XC:DEBUG:{R:}}${XC:DEBUG:{RH:}}${XC:DEBUG:{UT:}}"
+        },
+        {
+            "name": "Stop if no mac for fixed",
+            "operation": "CONDITION",
+            "condition": {
+                "statements": [
+                    {
+                        "left": "1",
+                        "op": "==",
+                        "right": "1"
+                    }
+                ],
+                "condition_type": "AND",
+                "stop": true
+            }
+        },
+        {
+            "name": "Debug#19",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{H:}}${XC:DEBUG:{E:}}${XC:DEBUG:{I:}}${XC:DEBUG:{L:}}${XC:DEBUG:{S:}}${XC:DEBUG:{P:}}${XC:DEBUG:{R:}}${XC:DEBUG:{RH:}}${XC:DEBUG:{UT:}}"
+        },
+        {
+            "name": "assignMac from L: for fixed",
+            "operation": "NOP",
+            "body_list": [
+                "${XC:COPY:{L:Mac1}:{L:mac}}${XC:FORMAT:TRUNCATE:{L:Mac1}:{2t}}",
+                "${XC:COPY:{L:Mac2}:{L:mac}}${XC:FORMAT:TRUNCATE:{L:Mac2}:{5t}}${XC:FORMAT:TRUNCATE:{L:Mac2}:{-2f}}",
+                "${XC:COPY:{L:Mac3}:{L:mac}}${XC:FORMAT:TRUNCATE:{L:Mac3}:{8t}}${XC:FORMAT:TRUNCATE:{L:Mac3}:{-2f}}",
+                "${XC:COPY:{L:Mac4}:{L:mac}}${XC:FORMAT:TRUNCATE:{L:Mac4}:{11t}}${XC:FORMAT:TRUNCATE:{L:Mac4}:{-2f}}",
+                "${XC:COPY:{L:Mac5}:{L:mac}}${XC:FORMAT:TRUNCATE:{L:Mac5}:{14t}}${XC:FORMAT:TRUNCATE:{L:Mac5}:{-2f}}",
+                "${XC:COPY:{L:Mac6}:{L:mac}}${XC:FORMAT:TRUNCATE:{L:Mac6}:{-2f}}",
+                "${XC:COPY:{L:MacFull}:{L:mac}}"
+            ]
+        },
+        {
+            "name": "checkForFixedIPv6Delete",
+            "comment": "check for Host or Fixed IPv6 DELETE, if true jump to Delete code",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${E:A:operation_type}",
+                        "op": "==",
+                        "right": "DELETE"
+                    }
+                ],
+                "next": "deleteEndpoint"
+            }
+        },
+        {
+            "name": "Debug#20",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{H:}}${XC:DEBUG:{E:}}${XC:DEBUG:{I:}}${XC:DEBUG:{L:}}${XC:DEBUG:{S:}}${XC:DEBUG:{P:}}${XC:DEBUG:{R:}}${XC:DEBUG:{RH:}}${XC:DEBUG:{UT:}}"
+        },
+        {
+            "name": "Get Check if duplicate endpoint with Fixed",
+            "operation": "GET",
+            "parse": "JSON",
+            "headers": {
+                "Authorization": "Bearer ${S:A:SESSID}"
+            },
+            "transport": {
+                "path": "/api/endpoint/mac-address/${L:A:Mac1}${L:A:Mac2}${L:A:Mac3}${L:A:Mac4}${L:A:Mac5}${L:A:Mac6}"
+            },
+            "result": [{
+                "codes": "200,201,202,203,204,404,405",
+                "next": "Skip if modify event and no mac address with Fixed"
+            }]
+        },
+        {
+            "name": "Debug#21",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{H:}}${XC:DEBUG:{E:}}${XC:DEBUG:{I:}}${XC:DEBUG:{L:}}${XC:DEBUG:{S:}}${XC:DEBUG:{P:}}${XC:DEBUG:{R:}}${XC:DEBUG:{RH:}}${XC:DEBUG:{UT:}}"
+        },
+        {
+            "name": "Skip if modify event and no mac address with Fixed",
+            "operation": "CONDITION",
+            "condition": {
+                "statements": [
+                    {
+                        "left": "${P:A:mac_address}",
+                        "op": "!=",
+                        "right": ""
+                    },
+                    {
+                        "left": "${E:A:operation_type}",
+                        "op": "==",
+                        "right": "MODIFY"
+                    }
+                ],
+                "condition_type": "AND",
+                "next": "check for Fingerprint"
+            }
+        },
+        {
+            "name": "Stop everything if mac isn't present with Fixed",
+            "operation": "CONDITION",
+            "condition": {
+                "statements": [
+                    {
+                        "left": "${P:A:mac_address}",
+                        "op": "!=",
+                        "right": ""
+                    }
+                ],
+                "condition_type": "OR",
+                "stop": true
+            }
+        },
+        {
+            "name": "Debug#22",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{H:}}${XC:DEBUG:{E:}}${XC:DEBUG:{I:}}${XC:DEBUG:{L:}}${XC:DEBUG:{S:}}${XC:DEBUG:{P:}}${XC:DEBUG:{R:}}${XC:DEBUG:{RH:}}${XC:DEBUG:{UT:}}"
+        },
+        {
+            "name": "Add an endpoint from a Fixed",
+            "operation": "POST",
+            "parse": "JSON",
+            "headers": {
+                "Authorization": "Bearer ${S:A:SESSID}"
+            },
+            "transport": {
+                "path": "/api/endpoint"
+            },
+            "body_list": [
+                "{",
+                    "\"mac_address\":\"${L:A:MacFull}\",",
+                    "\"status\":\"Known\",",
+                    "\"description\":\"Added via API at ${UT:A:TIME} - ${L:A:description}\",",
+                    "\"attributes\":{",
+                        "\"client_hostname\":\"${L:A:name}\",",
+                        "\"Device Type\":\"${L:A:type}\",",
+                        "\"Device Vendor\":\"${L:A:vendor}\",",
+                        "\"Location\":\"${L:A:Location}\",",
+                        "\"Model\":\"Unknown\",",
+                        "\"Infoblox DHCP Fingerprint\":\"Unknown\",",
+                        "\"Infoblox Managed\":\"True\",",
+                        "\"Infoblox Last Known IP\":\"${L:A:address}\",",
+                        "\"Comment\":\"${L:A:comment}\",",
+                        "\"OS Version\":\"Unknown\"",
+                    "}",
+                "}"
+            ]
+        },
+        {
+            "name": "Testing fixed",
+            "operation": "POST",
+            "parse": "JSON",
+            "headers": {
+                "Content-Type": "application/json",
+                "User-Agent": "Infoblox Security Integration",
+                "Accept": "*/*"
+            },
+            "transport": {
+                "path": "/async_netd/deviceprofiler/endpoints"
+            },
+            "body_list": [
+                "{",
+                "\"mac\":\"${L:A:MacFull}\",",
+                "\"ip\": \"${L:A:address}\",",
+                "\"device\":{",
+                    "\"family\":\"${L:A:vendor}\",",
+                    "\"category\":\"${L:A:type}\",", 
+                    "\"name\":\"${L:A:name}\"",
+                "}",
+                "}"
+            ]
+        },
+        {
+            "name": "Update extattrs for update fixed ip",
+            "operation": "PUT",
+            "transport": {
+                "path": "${E:A:values{_ref}}"
+            },
+            "wapi": "v2.7",
+            "wapi_quoting": "JSON",
+            "body_list": [
+                "{\"extattrs+\":{\"Aruba_SyncedAt\": { \"value\": \"${L:A:timestamp}\"}}}"
+            ]
+        },
+        {
+            "name": "end of adding a Fixed",
+            "operation": "CONDITION",
+            "condition": {
+                "statements": [
+                    {
+                        "left": "1",
+                        "op": "==",
+                        "right": "1"
+                    }
+                ],
+                "condition_type": "AND",
+                "next": "Stop everthing"
+            }
+        },
+        {
+            "name": "check if IPv4 or IPv6 for host",
+            "operation": "CONDITION",
+            "condition": {
+                "statements": [
+                    {
+                        "left": "${L:A:addr}",
+                        "op": "==",
+                        "right": "ipv6addr"
+                    }
+                ],
+                "condition_type": "AND",
+                "next": "Get Host_IPv6 information"
+            }
+        },
+        {
+            "name": "Debug#5",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{H:}}${XC:DEBUG:{E:}}${XC:DEBUG:{I:}}${XC:DEBUG:{L:}}${XC:DEBUG:{S:}}${XC:DEBUG:{P:}}${XC:DEBUG:{R:}}${XC:DEBUG:{RH:}}${XC:DEBUG:{UT:}}"
+        },
+        {
+            "name": "Get Host_IPv4 information",
+            "operation": "GET",
+            "parse": "JSON",
+            "transport": {
+                "path": "${E:A:values{_ref}}?_return_fields=mac,discovered_data.mac_address,discovered_data.vmhost_mac_address,discovered_data.vport_mac_address"
+            },
+            "wapi": "v2.7",
+            "result": [{
+                "codes": "200,201,202,203,204",
+                "next": "check if mac is present for host"
+            }]
+        },
+        {
+            "name": "Debug#6",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{H:}}${XC:DEBUG:{E:}}${XC:DEBUG:{I:}}${XC:DEBUG:{L:}}${XC:DEBUG:{S:}}${XC:DEBUG:{P:}}${XC:DEBUG:{R:}}${XC:DEBUG:{RH:}}${XC:DEBUG:{UT:}}"
+        },
+        {
+            "name": "Get Host_IPv6 information",
+            "operation": "GET",
+            "parse": "JSON",
+            "transport": {
+                "path": "${E:A:values{_ref}}?_return_fields=discovered_data.mac_address,discovered_data.vmhost_mac_address,discovered_data.vport_mac_address"
+            },
+            "wapi": "v2.7",
+            "result": [{
+                "codes": "200,201,202,203,204",
+                "next": "check if discovered mac_address is present for host"
+            }]
+        },
+        {
+            "name": "Debug#7.1",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{H:}}${XC:DEBUG:{E:}}${XC:DEBUG:{I:}}${XC:DEBUG:{L:}}${XC:DEBUG:{S:}}${XC:DEBUG:{P:}}${XC:DEBUG:{R:}}${XC:DEBUG:{RH:}}${XC:DEBUG:{UT:}}"
+        },
+        {
+            "name": "check if mac is present for host",
+            "operation": "CONDITION",
+            "condition": {
+                "statements": [
+                    {
+                        "left": "${P:A:mac}",
+                        "op": "!=",
+                        "right": ""
+                    }
+                ],
+                "condition_type": "AND",
+                "eval": "${XC:COPY:{L:mac}:{P:mac}}",
+                "next": "assignMac from P: for host"
+            }
+        },
+        {
+            "name": "Debug#7.2",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{H:}}${XC:DEBUG:{E:}}${XC:DEBUG:{I:}}${XC:DEBUG:{L:}}${XC:DEBUG:{S:}}${XC:DEBUG:{P:}}${XC:DEBUG:{R:}}${XC:DEBUG:{RH:}}${XC:DEBUG:{UT:}}"
+        },
+        {
+            "name": "check if discovered mac_address is present for host",
+            "operation": "CONDITION",
+            "condition": {
+                "statements": [
+                    {
+                        "left": "${P:A:discovered_data.mac_address}",
+                        "op": "!=",
+                        "right": ""
+                    }
+                ],
+                "condition_type": "AND",
+                "eval": "${XC:COPY:{L:mac}:{P:discovered_data.mac_address}}",
+                "next": "assignMac from P: for host"
+            }
+        },
+        {
+            "name": "Debug#7.3",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{H:}}${XC:DEBUG:{E:}}${XC:DEBUG:{I:}}${XC:DEBUG:{L:}}${XC:DEBUG:{S:}}${XC:DEBUG:{P:}}${XC:DEBUG:{R:}}${XC:DEBUG:{RH:}}${XC:DEBUG:{UT:}}"
+        },
+        {
+            "name": "check if discovered vmhost_mac_address is present for host",
+            "operation": "CONDITION",
+            "condition": {
+                "statements": [
+                    {
+                        "left": "${P:A:discovered_data.vmhost_mac_address}",
+                        "op": "!=",
+                        "right": ""
+                    }
+                ],
+                "condition_type": "AND",
+                "eval": "${XC:COPY:{L:mac}:{P:discovered_data.vmhost_mac_address}}",
+                "next": "assignMac from P: for host"
+            }
+        },
+        {
+            "name": "Debug#7.4",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{H:}}${XC:DEBUG:{E:}}${XC:DEBUG:{I:}}${XC:DEBUG:{L:}}${XC:DEBUG:{S:}}${XC:DEBUG:{P:}}${XC:DEBUG:{R:}}${XC:DEBUG:{RH:}}${XC:DEBUG:{UT:}}"
+        },
+        {
+            "name": "check if discovered vport_mac_address is present for host",
+            "operation": "CONDITION",
+            "condition": {
+                "statements": [
+                    {
+                        "left": "${P:A:discovered_data.vport_mac_address}",
+                        "op": "!=",
+                        "right": ""
+                    }
+                ],
+                "condition_type": "AND",
+                "eval": "${XC:COPY:{L:mac}:{P:discovered_data.vport_mac_address}}",
+                "next": "assignMac from P: for host"
+            }
+        },
+        {
+            "name": "Debug#7.5",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{H:}}${XC:DEBUG:{E:}}${XC:DEBUG:{I:}}${XC:DEBUG:{L:}}${XC:DEBUG:{S:}}${XC:DEBUG:{P:}}${XC:DEBUG:{R:}}${XC:DEBUG:{RH:}}${XC:DEBUG:{UT:}}"
+        },
+        {
+            "name": "Stop if no mac for fixed for host",
+            "operation": "CONDITION",
+            "condition": {
+                "statements": [
+                    {
+                        "left": "1",
+                        "op": "==",
+                        "right": "1"
+                    }
+                ],
+                "condition_type": "AND",
+                "stop": true
+            }
+        },
+        {
+            "name": "Debug#7.6",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{H:}}${XC:DEBUG:{E:}}${XC:DEBUG:{I:}}${XC:DEBUG:{L:}}${XC:DEBUG:{S:}}${XC:DEBUG:{P:}}${XC:DEBUG:{R:}}${XC:DEBUG:{RH:}}${XC:DEBUG:{UT:}}"
+        },
+        {
+            "name": "assignMac from P: for host",
+            "operation": "NOP",
+            "body_list": [
+                "${XC:COPY:{L:Mac1}:{L:mac}}${XC:FORMAT:TRUNCATE:{L:Mac1}:{2t}}",
+                "${XC:COPY:{L:Mac2}:{L:mac}}${XC:FORMAT:TRUNCATE:{L:Mac2}:{5t}}${XC:FORMAT:TRUNCATE:{L:Mac2}:{-2f}}",
+                "${XC:COPY:{L:Mac3}:{L:mac}}${XC:FORMAT:TRUNCATE:{L:Mac3}:{8t}}${XC:FORMAT:TRUNCATE:{L:Mac3}:{-2f}}",
+                "${XC:COPY:{L:Mac4}:{L:mac}}${XC:FORMAT:TRUNCATE:{L:Mac4}:{11t}}${XC:FORMAT:TRUNCATE:{L:Mac4}:{-2f}}",
+                "${XC:COPY:{L:Mac5}:{L:mac}}${XC:FORMAT:TRUNCATE:{L:Mac5}:{14t}}${XC:FORMAT:TRUNCATE:{L:Mac5}:{-2f}}",
+                "${XC:COPY:{L:Mac6}:{L:mac}}${XC:FORMAT:TRUNCATE:{L:Mac6}:{-2f}}",
+                "${XC:COPY:{L:MacFull}:{L:mac}}"
+            ]
+        },
+        {
+            "name": "checkForHostIPv6Delete",
+            "comment": "check for Host or Fixed IPv6 DELETE, if true jump to Delete code",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${E:A:operation_type}",
+                        "op": "==",
+                        "right": "DELETE"
+                    }
+                ],
+                "next": "deleteEndpoint"
+            }
+        },
+        {
+            "name": "Debug#8",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{H:}}${XC:DEBUG:{E:}}${XC:DEBUG:{I:}}${XC:DEBUG:{L:}}${XC:DEBUG:{S:}}${XC:DEBUG:{P:}}${XC:DEBUG:{R:}}${XC:DEBUG:{RH:}}${XC:DEBUG:{UT:}}"
+        },
+        {
+            "name": "Get Check if duplicate endpoint with host",
+            "operation": "GET",
+            "parse": "JSON",
+            "headers": {
+                "Authorization": "Bearer ${S:A:SESSID}"
+            },
+            "transport": {
+                "path": "/api/endpoint/mac-address/${L:A:Mac1}${L:A:Mac2}${L:A:Mac3}${L:A:Mac4}${L:A:Mac5}${L:A:Mac6}"
+            },
+            "result": [{
+                "codes": "200,201,202,203,204,404,405",
+                "next": "Skip if modify event and no mac address"
+            }]
+        },
+        {
+            "name": "Skip if modify event and no mac address",
+            "operation": "CONDITION",
+            "condition": {
+                "statements": [
+                    {
+                        "left": "${P:A:mac_address}",
+                        "op": "!=",
+                        "right": ""
+                    },
+                    {
+                        "left": "${E:A:operation_type}",
+                        "op": "==",
+                        "right": "MODIFY"
+                    }
+                ],
+                "condition_type": "AND",
+                "next": "check for Fingerprint"
+            }
+        },
+        {
+            "name": "Debug#9",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{H:}}${XC:DEBUG:{E:}}${XC:DEBUG:{I:}}${XC:DEBUG:{L:}}${XC:DEBUG:{S:}}${XC:DEBUG:{P:}}${XC:DEBUG:{R:}}${XC:DEBUG:{RH:}}${XC:DEBUG:{UT:}}"
+        },
+        {
+            "name": "Stop everthing if mac isn't present with host",
+            "operation": "CONDITION",
+            "condition": {
+                "statements": [
+                    {
+                        "left": "${P:A:mac_address}",
+                        "op": "!=",
+                        "right": ""
+                    }
+                ],
+                "condition_type": "OR",
+                "stop": true
+            }
+        },
+        {
+            "name": "Debug#10",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{H:}}${XC:DEBUG:{E:}}${XC:DEBUG:{I:}}${XC:DEBUG:{L:}}${XC:DEBUG:{S:}}${XC:DEBUG:{P:}}${XC:DEBUG:{R:}}${XC:DEBUG:{RH:}}${XC:DEBUG:{UT:}}"
+        },
+        {
+            "name": "Add an endpoint from a host",
+            "operation": "POST",
+            "parse": "JSON",
+            "headers": {
+                "Authorization": "Bearer ${S:A:SESSID}"
+            },
+            "transport": {
+                "path": "/api/endpoint"
+            },
+            "body_list": [
+                "{",
+                "\"mac_address\":\"${L:A:MacFull}\",",
+                "\"status\":\"Known\",",
+                "\"description\":\"Added via API at ${UT:A:TIME} - ${L:A:description}\",",
+                "\"attributes\":{",
+                    "\"client_hostname\":\"${L:A:name}\",",
+                    "\"Device Type\":\"${L:A:type}\",",
+                    "\"Device Vendor\":\"${L:A:vendor}\",",
+                    "\"Location\":\"${L:A:Location}\",",
+                    "\"Model\":\"Unknown\",",
+                    "\"Infoblox DHCP Fingerprint\":\"Unknown\",",
+                    "\"Infoblox Managed\":\"True\",",
+                    "\"Infoblox Last Known IP\":\"${L:A:address}\",",
+                    "\"Comment\":\"${L:A:comment}\",",
+                    "\"OS Version\":\"Unknown\"",
+                "}",
+                "}"
+            ]
+        },
+        {
+            "name": "Testing host",
+            "operation": "POST",
+            "parse": "JSON",
+            "headers": {
+                "Content-Type": "application/json",
+                "User-Agent": "Infoblox Security Integration",
+                "Accept": "*/*"
+            },
+            "transport": {
+                "path": "/async_netd/deviceprofiler/endpoints"
+            },
+            "body_list": [
+                "{",
+                "\"mac\":\"${L:A:MacFull}\",",
+                "\"ip\": \"${L:A:address}\",",
+                "\"hostname\": \"${E:A:values{host}}\",",
+                "\"device\":{",
+                    "\"family\":\"${L:A:vendor}\",",
+                    "\"category\":\"${L:A:type}\",", 
+                    "\"name\":\"${L:A:name}\"",
+                "}",
+                "}"
+            ]
+        },
+        {
+            "name": "check if IPv4 or IPv6 to get Host for update",
+            "operation": "CONDITION",
+            "condition": {
+                "statements": [
+                    {
+                        "left": "${L:A:addr}",
+                        "op": "==",
+                        "right": "ipv6addr"
+                    }
+                ],
+                "condition_type": "AND",
+                "next": "Get HostIPv6 _ref"
+            }
+        },
+        {
+            "name": "Get HostIPv4 _ref",
+            "operation": "GET",
+            "transport": {
+                "path": "record:host?ipv4addr=${L:U:address}&network_view=${L:U:network_view}&_return_fields=extattrs"
+            },
+            "wapi": "v2.7",
+            "result": [{
+                "codes": "200,201,202,203,204",
+                "next": "Update extattrs for update Host"
+            }]
+        },
+        {
+            "name": "Get HostIPv6 _ref",
+            "operation": "GET",
+            "transport": {
+                "path": "record:host?ipv6addr=${L:U:address}&network_view=${L:U:network_view}&_return_fields=extattrs"
+            },
+            "wapi": "v2.7"
+        },
+        {
+            "name": "Update extattrs for update Host",
+            "operation": "PUT",
+            "transport": {
+                "path": "${P:A:PARSE[0]{_ref}}"
+            },
+            "wapi": "v2.7",
+            "wapi_quoting": "JSON",
+            "body_list": [
+                "{\"extattrs+\":{\"Aruba_SyncedAt\": { \"value\": \"${L:A:timestamp}\"}}}"
+            ]
+        },
+        {
+            "name": "end of adding a host",
+            "operation": "CONDITION",
+            "condition": {
+                "statements": [
+                    {
+                        "left": "1",
+                        "op": "==",
+                        "right": "1"
+                    }
+                ],
+                "condition_type": "AND",
+                "next": "Stop everthing"
+            }
+        },
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        {
+            "name": "Check if Lease is wanted",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${E:A:ip.extattrs{Aruba_Sync}}",
+                        "op": "==",
+                        "right": "true"
+                    }
+                ],
+                "next": "Check if location for lease"
+            }
+        },
+        {
+            "name": "checkNetworkAssetSync",
+            "comment": "[SYNC ASSET CHECK] Verify network EAs for syncing asset.",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "${E:A:network.extattrs{Aruba_Sync}}",
+                    "op": "==",
+                    "right": "true"
+                }],
+                "else_stop": true
+            }
+        },
+
+        {
+            "name": "Check if location for lease",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "OR",
+                "statements": [
+                    {
+                        "left": "${E:A:ip.extattrs{Aruba_Location}}",
+                        "op": "==",
+                        "right": ""
+                    }
+                ],
+                "eval": "${XC:ASSIGN:{L:Location}:{S:Unknown}}",
+                "else_eval": "${XC:COPY:{L:Location}:{E:ip.extattrs{Aruba_Location}}}"
+            }
+        },
+        {
+            "name": "checkNameLease",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${E:A:client_hostname}",
+                        "op": "==",
+                        "right": ""
+                    }
+                ],
+                "eval": "${XC:ASSIGN:{L:name}:{S:Unknown}}",
+                "else_eval": "${XC:COPY:{L:name}:{E:client_hostname}}"
+            }
+        },
+        {
+            "name": "assignMac from E: for lease",
+            "operation": "NOP",
+            "body_list": [
+                "${XC:COPY:{L:Mac1}:{E:hardware}}${XC:FORMAT:TRUNCATE:{L:Mac1}:{2t}}",
+                "${XC:COPY:{L:Mac2}:{E:hardware}}${XC:FORMAT:TRUNCATE:{L:Mac2}:{5t}}${XC:FORMAT:TRUNCATE:{L:Mac2}:{-2f}}",
+                "${XC:COPY:{L:Mac3}:{E:hardware}}${XC:FORMAT:TRUNCATE:{L:Mac3}:{8t}}${XC:FORMAT:TRUNCATE:{L:Mac3}:{-2f}}",
+                "${XC:COPY:{L:Mac4}:{E:hardware}}${XC:FORMAT:TRUNCATE:{L:Mac4}:{11t}}${XC:FORMAT:TRUNCATE:{L:Mac4}:{-2f}}",
+                "${XC:COPY:{L:Mac5}:{E:hardware}}${XC:FORMAT:TRUNCATE:{L:Mac5}:{14t}}${XC:FORMAT:TRUNCATE:{L:Mac5}:{-2f}}",
+                "${XC:COPY:{L:Mac6}:{E:hardware}}${XC:FORMAT:TRUNCATE:{L:Mac6}:{-2f}}",
+                "${XC:COPY:{L:MacFull}:{E:hardware}}"
+            ]
+        },
+        {
+            "name": "Debug#1",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{H:}}${XC:DEBUG:{E:}}${XC:DEBUG:{I:}}${XC:DEBUG:{L:}}${XC:DEBUG:{S:}}${XC:DEBUG:{P:}}${XC:DEBUG:{R:}}${XC:DEBUG:{RH:}}${XC:DEBUG:{UT:}}"
+        },
+        {
+            "name":"checkForLeaseDelete",
+            "comment": "Check status of LEASE, if RELEASED or EXPIRED goto delete steps, otherwise continue",
+            "operation": "CONDITION",
+            "condition":{
+                "condition_type": "OR",
+                "statements": [
+                    {
+                        "left": "${E::binding_state}",
+                        "op": "=~",
+                        "right": "RELEASE"
+                    },
+                    {
+                        "left": "${E::binding_state}",
+                        "op": "=~",
+                        "right": "EXPIRE"
+                    },
+                    {
+                        "left": "${E:A:binding_state}", 
+                        "op": "=~", 
+                        "right": "FREE"
+                    },
+					{
+                        "left": "${E:A:binding_state}", 
+                        "op": "=~", 
+                        "right": "ABANDON"
+                    }
+                ],
+                "next":"deleteEndpoint"
+            }   
+        },
+       
+        {
+            "name": "Debug#1b",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{H:}}${XC:DEBUG:{E:}}${XC:DEBUG:{I:}}${XC:DEBUG:{L:}}${XC:DEBUG:{S:}}${XC:DEBUG:{P:}}${XC:DEBUG:{R:}}${XC:DEBUG:{RH:}}${XC:DEBUG:{UT:}}"
+        },
+      
+        {
+            "name": "Get Lease information",
+            "operation": "GET",
+            "parse": "JSON",
+            "transport": {
+                "path": "lease?address=${E:A:address}&network_view=${E:A:network_view}&_return_fields=fingerprint"
+            },
+            "wapi": "v2.7",
+            "result": [{
+                "codes": "200,201,202,203,204",
+                "next": "Check if fingerprint is unknown"
+            }]
+        },
+        {
+            "name": "Debug#3",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{H:}}${XC:DEBUG:{E:}}${XC:DEBUG:{I:}}${XC:DEBUG:{L:}}${XC:DEBUG:{S:}}${XC:DEBUG:{P:}}${XC:DEBUG:{R:}}${XC:DEBUG:{RH:}}${XC:DEBUG:{UT:}}"
+        },
+        {
+            "name": "Check if fingerprint is unknown",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${P:A:PARSE[0]{fingerprint}}",
+                        "op": "==",
+                        "right": ""
+                    }
+                ],
+                "eval": "${XC:ASSIGN:{L:fingerprint}:{S:Unknown}}",
+                "else_eval": "${XC:COPY:{L:fingerprint}:{P:PARSE[0]{fingerprint}}}",
+                "else_next": "Get Check if duplicate endpoint"
+            }
+        },
+        {
+            "name": "CheckFingerprintEventNamespace",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${E::fingerprint}",
+                        "op": "==",
+                        "right": ""
+                    }
+                ],
+                "eval": "${XC:ASSIGN:{L:fingerprint}:{S:Unknown}}",
+                "else_eval": "${XC:COPY:{L:fingerprint}:{E:fingerprint}}"
+            }
+        },
+        {
+            "name": "Get Check if duplicate endpoint",
+            "operation": "GET",
+            "parse": "JSON",
+            "headers": {
+                "Authorization": "Bearer ${S:A:SESSID}"
+            },
+            "transport": {
+                "path": "/api/endpoint/mac-address/${L:A:Mac1}${L:A:Mac2}${L:A:Mac3}${L:A:Mac4}${L:A:Mac5}${L:A:Mac6}"
+            },
+            "result": [{
+                "codes": "200,201,202,203,204,404,405",
+                "next": "check for Location"
+            }]
+        },
+        {
+            "name": "Add an endpoint",
+            "operation": "POST",
+            "parse": "JSON",
+            "headers": {
+                "Authorization": "Bearer ${S:A:SESSID}"
+            },
+            "transport": {
+                "path": "/api/endpoint"
+            },
+            "result": [{
+                "codes": "200,422",
+                "next": "tryPutting"
+            }],
+            "body_list": [
+                "{",
+                "\"mac_address\":\"${E:A:hardware}\",",
+                "\"status\":\"Known\",",
+                "\"description\":\"Added via API at ${UT:A:TIME} - ${L:A:description}\",",
+                "\"attributes\":{",
+                    "\"client_hostname\":\"${L:A:name}\",",
+                    "\"Device Type\":\"${L:A:type}\",",
+                    "\"Device Vendor\":\"${L:A:vendor}\",",
+                    "\"Location\":\"${L:A:Location}\",",
+                    "\"Model\":\"Unknown\",",
+                    "\"Infoblox DHCP Fingerprint\":\"${L:A:fingerprint}\",",
+                    "\"Infoblox Managed\":\"True\",",
+                    "\"Infoblox Last Known IP\":\"${E:A:address}\",",
+                    "\"Comment\":\"${L:A:comment}\",",
+                    "\"OS Version\":\"Unknown\"",
+                "}",
+                "}"
+            ]
+        },
+        {
+            "name": "tryPutting",
+            "operation": "PUT",
+            "parse": "JSON",
+            "headers": {
+                "Authorization": "Bearer ${S:A:SESSID}"
+            },
+            "transport": {
+                "path": "/api/endpoint/mac-address/${L:A:Mac1}${L:A:Mac2}${L:A:Mac3}${L:A:Mac4}${L:A:Mac5}${L:A:Mac6}"
+            },
+            "body_list": [
+                "{",
+                "\"mac_address\":\"${L:A:MacFull}\",",
+                "\"status\":\"Known\",",
+                "\"description\":\"${L:A:description}\",",
+                "\"attributes\":{",
+                    "\"client_hostname\":\"${L:A:name}\",",
+                    "\"Device Type\":\"${L:A:type}\",",
+                    "\"Device Vendor\":\"${L:A:vendor}\",",
+                    "\"Location\":\"${L:A:Location}\",",
+                    "\"Model\":\"Unknown\",",
+                    "\"Comment\":\"${L:A:comment}\",",
+                    "\"Infoblox Last Known IP\":\"${E:A:address}\",",
+                    "\"OS Version\":\"Unknown\",",
+                    "\"Infoblox Managed\":\"True\",",
+                    "\"Infoblox DHCP Fingerprint\":\"${L:A:fingerprint}\",",
+                    "\"Infoblox Rule Category\":\"${L:A:RuleCategory}\",",
+                    "\"Infoblox Rule Id\":\"${L:A:RuleId}\",",
+                    "\"Infoblox Threat Category\":\"${L:A:ThreatCategory}\",",
+                    "\"Infoblox Threat Detection Device IP\":\"${L:A:ThreatDetection}\",",
+                    "\"Infoblox Threat Name\":\"${L:A:ThreatName}\",",
+                    "\"Infoblox Threat Severity\":\"${L:A:ThreatSeverity}\",",
+                    "\"Infoblox Threat Status\":\"${L:A:ThreatStatus}\"",
+                "}",
+                "}"
+            ]
+        },
+        {
+            "name": "Testing lease",
+            "operation": "POST",
+            "parse": "JSON",
+            "headers": {
+                "Content-Type": "application/json",
+                "User-Agent": "Infoblox Security Integration",
+                "Accept": "*/*"
+            },
+            "transport": {
+                "path": "/async_netd/deviceprofiler/endpoints"
+            },
+            "body_list": [
+                "{",
+                "\"mac\":\"${L:A:MacFull}\",",
+                "\"ip\": \"${E:A:address}\",",
+                "\"device\":{",
+                    "\"family\":\"${L:A:vendor}\",",
+                    "\"category\":\"${L:A:type}\",", 
+                    "\"name\":\"${L:A:name}\"",
+                "}",
+                "}"
+            ]
+        },
+        {
+            "name": "Debug4",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{H:}}${XC:DEBUG:{E:}}${XC:DEBUG:{I:}}${XC:DEBUG:{L:}}${XC:DEBUG:{S:}}${XC:DEBUG:{P:}}${XC:DEBUG:{R:}}${XC:DEBUG:{RH:}}${XC:DEBUG:{UT:}}"
+        },
+        {
+            "name": "Stop everthing",
+            "operation": "CONDITION",
+            "condition": {
+                "statements": [
+                    {
+                        "left": "1",
+                        "op": "==",
+                        "right": "1"
+                    }
+                ],
+                "condition_type": "AND",
+                "stop": true
+            }
+        },
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        {
+            "name": "GetMACforDelete",
+            "operation": "CONDITION",
+            "condition": {
+                    "statements": [
+                        {"left": "${E:A:values{mac}}", "op": "!=", "right": ""},
+                        {"left": "${L:A:mac}", "op": "==", "right": ""}
+                    ],
+                    "condition_type": "AND",
+                    "eval": "${XC:COPY:{L:mac}:{E:values{mac}}}",
+                    "else_stop": true
+            }
+        },
+        {
+            "name": "extractMACfromLvar",
+            "operation": "NOP",
+            "body_list": [
+                "${XC:COPY:{L:Mac1}:{L:mac}}${XC:FORMAT:TRUNCATE:{L:Mac1}:{2t}}",
+                "${XC:COPY:{L:Mac2}:{L:mac}}${XC:FORMAT:TRUNCATE:{L:Mac2}:{5t}}${XC:FORMAT:TRUNCATE:{L:Mac2}:{-2f}}",
+                "${XC:COPY:{L:Mac3}:{L:mac}}${XC:FORMAT:TRUNCATE:{L:Mac3}:{8t}}${XC:FORMAT:TRUNCATE:{L:Mac3}:{-2f}}",
+                "${XC:COPY:{L:Mac4}:{L:mac}}${XC:FORMAT:TRUNCATE:{L:Mac4}:{11t}}${XC:FORMAT:TRUNCATE:{L:Mac4}:{-2f}}",
+                "${XC:COPY:{L:Mac5}:{L:mac}}${XC:FORMAT:TRUNCATE:{L:Mac5}:{14t}}${XC:FORMAT:TRUNCATE:{L:Mac5}:{-2f}}",
+                "${XC:COPY:{L:Mac6}:{L:mac}}${XC:FORMAT:TRUNCATE:{L:Mac6}:{-2f}}",
+                "${XC:COPY:{L:MacFull}:{L:mac}}"
+            ]
+        },
+        {
+            "name": "deleteEndpoint",
+            "comment": "Remove the endpoint associated with this event from Clearpass",
+            "operation": "DELETE",
+            "parse": "JSON",
+            "headers": {
+                "Authorization": "Bearer ${S:A:SESSID}"
+            },
+            "transport": {
+                "path": "/api/endpoint/mac-address/${L:A:Mac1}${L:A:Mac2}${L:A:Mac3}${L:A:Mac4}${L:A:Mac5}${L:A:Mac6}"
+            }
+        },
+        {
+            "name": "haltTemplate",
+            "comment": "Halt template after the deletion of endpoint",
+            "operation": "CONDITION",
+            "condition": {
+                "statements": [
+                    {
+                        "left": "1",
+                        "op": "==",
+                        "right": "1"
+                    }
+                ],
+                "condition_type": "AND",
+                "stop": true
+            }
+        },
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+       
+        {
+            "name": "check for Fingerprint",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${P:A:attributes{Infoblox DHCP Fingerprint}}",
+                        "op": "==",
+                        "right": ""
+                    }
+                ],
+                "eval": "${XC:ASSIGN:{L:fingerpring}:{S:Unknown}}",
+                "else_eval": "${XC:COPY:{L:fingerpring}:{P:attributes{Infoblox DHCP Fingerprint}}}"
+            }
+        },
+        {
+            "name": "check for Location",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${P:A:attributes{Location}}",
+                        "op": "!=",
+                        "right": ""
+                    },
+                    {
+                        "left": "${L:A:Location}",
+                        "op": "==",
+                        "right": "Unknown"
+                    }
+                ],
+                "eval": "${XC:COPY:{L:Location}:{P:attributes{Location}}}"
+            }
+        },
+        {
+            "name": "check for Comment",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${P:A:attributes{Comment}}",
+                        "op": "==",
+                        "right": ""
+                    }
+                ],
+                "eval": "${XC:ASSIGN:{L:comment}:{S:Unknown}}",
+                "else_eval": "${XC:COPY:{L:comment}:{P:attributes{Comment}}}"
+            }
+        },
+        {
+            "name": "check for Description",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${P:A:description}",
+                        "op": "==",
+                        "right": ""
+                    }
+                ],
+                "eval": "${XC:ASSIGN:{L:description}:{S:Unknown}}",
+                "else_eval": "${XC:COPY:{L:description}:{P:description}}"
+            }
+        },
+        {
+            "name": "check for Device Vendor",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${P:A:attributes{Device Vendor}}",
+                        "op": "==",
+                        "right": ""
+                    }
+                ],
+                "eval": "${XC:ASSIGN:{L:vendor}:{S:Unknown}}",
+                "else_eval": "${XC:COPY:{L:vendor}:{P:attributes{Device Vendor}}}"
+            }
+        },
+        {
+            "name": "check for client_hostname",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${P:A:attributes{client_hostname}}",
+                        "op": "!=",
+                        "right": ""
+                    }
+                ],
+                "eval": "${XC:COPY:{L:name}:{P:attributes{client_hostname}}}"
+            }
+        },
+        {
+            "name": "check for client_hostname if host event",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${E:A:event_type}",
+                        "op": "=~",
+                        "right": "HOST"
+                    }
+                ],
+                "eval": "${XC:COPY:{L:name}:{E:values{host}}}"
+            }
+        },
+        {
+            "name": "check for Device Type",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${P:A:attributes{Device Type}}",
+                        "op": "==",
+                        "right": ""
+                    }
+                ],
+                "eval": "${XC:ASSIGN:{L:type}:{S:Unknown}}",
+                "else_eval": "${XC:COPY:{L:type}:{P:attributes{Device Type}}}"
+            }
+        },
+        {
+            "name": "check for OS Version",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${P:A:attributes{OS Version}}",
+                        "op": "==",
+                        "right": ""
+                    }
+                ],
+                "eval": "${XC:ASSIGN:{L:os_version}:{S:Unknown}}",
+                "else_eval": "${XC:COPY:{L:os_version}:{P:attributes{OS Version}}}"
+            }
+        },
+        {
+            "name": "check for Model",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${P:A:attributes{Model}}",
+                        "op": "==",
+                        "right": ""
+                    }
+                ],
+                "eval": "${XC:ASSIGN:{L:model}:{S:Unknown}}",
+                "else_eval": "${XC:COPY:{L:model}:{P:attributes{Model}}}"
+            }
+        },
+        {
+            "name": "check for RuleCategory",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${P:A:attributes{Infoblox Rule Category}}",
+                        "op": "==",
+                        "right": ""
+                    }
+                ],
+                "eval": "${XC:ASSIGN:{L:RuleCategory}:{S:Unknown}}",
+                "else_eval": "${XC:COPY:{L:RuleCategory}:{P:attributes{Infoblox Rule Category}}}"
+            }
+        },
+        {
+            "name": "check for RuleId",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${P:A:attributes{Infoblox Rule Id}}",
+                        "op": "==",
+                        "right": ""
+                    }
+                ],
+                "eval": "${XC:ASSIGN:{L:RuleId}:{S:Unknown}}",
+                "else_eval": "${XC:COPY:{L:RuleId}:{P:attributes{Infoblox Rule Id}}}"
+            }
+        },
+        {
+            "name": "check for Threat Category",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${P:A:attributes{Infoblox Threat Category}}",
+                        "op": "==",
+                        "right": ""
+                    }
+                ],
+                "eval": "${XC:ASSIGN:{L:ThreatCategory}:{S:Unknown}}",
+                "else_eval": "${XC:COPY:{L:ThreatCategory}:{P:attributes{Infoblox Threat Category}}}"
+            }
+        },
+        {
+            "name": "check for Threat Detection Device IP",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${P:A:attributes{Infoblox Threat Detection Device IP}}",
+                        "op": "==",
+                        "right": ""
+                    }
+                ],
+                "eval": "${XC:ASSIGN:{L:ThreatDetection}:{S:Unknown}}",
+                "else_eval": "${XC:COPY:{L:ThreatDetection}:{P:attributes{Infoblox Threat Detection Device IP}}}"
+            }
+        },
+        {
+            "name": "check for Threat Name",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${P:A:attributes{Infoblox Threat Name}}",
+                        "op": "==",
+                        "right": ""
+                    }
+                ],
+                "eval": "${XC:ASSIGN:{L:ThreatName}:{S:Unknown}}",
+                "else_eval": "${XC:COPY:{L:ThreatName}:{P:attributes{Infoblox Threat Name}}}"
+            }
+        },
+        {
+            "name": "check for Threat Severity",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${P:A:attributes{Infoblox Threat Severity}}",
+                        "op": "==",
+                        "right": ""
+                    }
+                ],
+                "eval": "${XC:ASSIGN:{L:ThreatSeverity}:{S:Unknown}}",
+                "else_eval": "${XC:COPY:{L:ThreatSeverity}:{P:attributes{Infoblox Threat Severity}}}"
+            }
+        },
+        {
+            "name": "check for Threat Status",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${P:A:attributes{Infoblox Threat Status}}",
+                        "op": "==",
+                        "right": ""
+                    }
+                ],
+                "eval": "${XC:ASSIGN:{L:ThreatStatus}:{S:Unresolved}}",
+                "else_eval": "${XC:COPY:{L:ThreatStatus}:{P:attributes{Infoblox Threat Status}}}"
+            }
+        },
+
+
+        {
+            "name": "check for lease to go back",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${E:A:event_type}",
+                        "op": "=~",
+                        "right": "LEASE"
+                    }
+                ],
+                "next": "Add an endpoint"
+            }
+        },
+
+
+
+
+        {
+            "name": "Get all discovery information for modify events",
+            "operation": "GET",
+            "transport": {
+                "path": "${L:A:Path}?${L:A:addr}=${L:A:address}&_return_fields=comment,device_description,device_location,device_type,device_vendor,name"
+            },
+            "wapi": "v2.7",
+            "parse": "JSON"
+        },
+        {
+            "name": "Check if name is unknown for modify events",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "OR",
+                "statements": [
+                    {
+                        "left": "${P:A:PARSE[0]{name}}",
+                        "op": "==",
+                        "right": ""
+                    },
+                    {
+                        "left": "${P:A:PARSE[0]{name}}",
+                        "op": "==",
+                        "right": "unknown"
+                    }
+                ],
+                "eval": "${XC:ASSIGN:{L:name}:{S:Unknown}}",
+                "else_eval": "${XC:COPY:{L:name}:{P:PARSE[0]{name}}}"
+            }
+        },
+        {
+            "name": "check for description for modify events",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${P:A:PARSE[0]{device_description}}",
+                        "op": "==",
+                        "right": ""
+                    }
+                ],
+                "eval": "${XC:ASSIGN:{L:description}:{S:No Description}}",
+                "else_eval": "${XC:COPY:{L:description}:{P:PARSE[0]{device_description}}}"
+            }
+        },
+       
+        {
+            "name": "check for vendor for modify events",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${P:A:PARSE[0]{device_vendor}}",
+                        "op": "==",
+                        "right": ""
+                    }
+                ],
+                "eval": "${XC:ASSIGN:{L:vendor}:{S:Unknown}}",
+                "else_eval": "${XC:COPY:{L:vendor}:{P:PARSE[0]{device_vendor}}}"
+            }
+        },
+        {
+            "name": "check for type for modify events",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${P:A:PARSE[0]{device_type}}",
+                        "op": "==",
+                        "right": ""
+                    }
+                ],
+                "eval": "${XC:ASSIGN:{L:type}:{S:Unknown}}",
+                "else_eval": "${XC:COPY:{L:type}:{P:PARSE[0]{device_type}}}"
+            }
+        },
+        {
+            "name": "check for comment for modify events",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${P:A:PARSE[0]{comment}}",
+                        "op": "==",
+                        "right": ""
+                    }
+                ],
+                "eval": "${XC:ASSIGN:{L:comment}:{S:No Comment}}",
+                "else_eval": "${XC:COPY:{L:comment}:{P:PARSE[0]{comment}}}"
+            }
+        },
+        {
+            "name": "Modify an endpoint",
+            "operation": "PATCH",
+            "parse": "JSON",
+            "headers": {
+                "Authorization": "Bearer ${S:A:SESSID}"
+            },
+            "transport": {
+                "path": "/api/endpoint/mac-address/${L:A:Mac1}${L:A:Mac2}${L:A:Mac3}${L:A:Mac4}${L:A:Mac5}${L:A:Mac6}"
+            },
+            "body_list": [
+                "{",
+                "\"mac_address\":\"${L:A:MacFull}\",",
+                "\"status\":\"Known\",",
+                "\"description\":\"Added via API at ${UT:A:TIME} - ${L:A:description}\",",
+                "\"attributes\":{",
+                    "\"client_hostname\":\"${L:A:name}\",",
+                    "\"Device Type\":\"${L:A:type}\",",
+                    "\"Device Vendor\":\"${L:A:vendor}\",",
+                    "\"Location\":\"${L:A:Location}\",",
+                    "\"Comment\":\"${L:A:comment}\",",
+                    "\"Model\":\"Unknown\",",
+                    "\"Infoblox Last Known IP\":\"${L:A:address}\",",
+                    "\"OS Version\":\"Unknown\",",
+                    "\"Infoblox Managed\":\"True\",",
+                    "\"Infoblox DHCP Fingerprint\":\"${L:A:fingerpring}\",",
+                    "\"Infoblox Threat Category\":\"${L:A:ThreatCategory}\",",
+                    "\"Infoblox Threat Detection Device IP\":\"${L:A:ThreatDetection}\",",
+                    "\"Infoblox Threat Name\":\"${L:A:ThreatName}\",",
+                    "\"Infoblox Threat Severity\":\"${L:A:ThreatSeverity}\",",
+                    "\"Infoblox Rule Id\":\"${L:A:RuleId}\",",
+                    "\"Infoblox Rule Category\":\"${L:A:RuleCategory}\",",
+                    "\"Infoblox Threat Status\":\"${L:A:ThreatStatus}\"",
+                "}",
+                "}"
+            ]
+        },
+        {
+            "name": " modify",
+            "operation": "POST",
+            "parse": "JSON",
+            "headers": {
+                "Content-Type": "application/json",
+                "User-Agent": "Infoblox Security Integration",
+                "Accept": "*/*"
+            },
+            "transport": {
+                "path": "/async_netd/deviceprofiler/endpoints"
+            },
+            "body_list": [
+                "{",
+                "\"mac\":\"${L:A:MacFull}\",",
+                "\"ip\": \"${L:A:address}\",",
+                "\"hostname\": \"${L:A:name}\",",
+                "\"device\":{",
+                    "\"family\":\"${L:A:vendor}\",",
+                    "\"category\":\"${L:A:type}\",", 
+                    "\"name\":\"${L:A:name}\"",
+                "}",
+                "}"
+            ]
+        },
+        {
+            "name": "Stop if lease event",
+            "operation": "CONDITION",
+            "condition": {
+                "statements": [
+                    {
+                        "left": "${E:A:event_type}",
+                        "op": "==",
+                        "right": "LEASE"
+                    }
+                ],
+                "condition_type": "OR",
+                "stop": true
+            }
+        },
+        {
+            "name": "skip if fixed event to update information",
+            "operation": "CONDITION",
+            "condition": {
+                "statements": [
+                    {
+                        "left": "${E:A:event_type}",
+                        "op": "=~",
+                        "right": "FIXED"
+                    }
+                ],
+                "condition_type": "OR",
+                "next": "Update extattrs for update fixed ip"
+            }
+        },
+        {
+            "name": "check if IPv4 or IPv6 to get Host for update for modify events",
+            "operation": "CONDITION",
+            "condition": {
+                "statements": [
+                    {
+                        "left": "${L:A:addr}",
+                        "op": "==",
+                        "right": "ipv6addr"
+                    }
+                ],
+                "condition_type": "AND",
+                "next": "Get HostIPv6 _ref"
+            }
+        },
+        {
+            "name": "Get HostIPv4 _ref for modify events",
+            "operation": "GET",
+            "transport": {
+                "path": "record:host?ipv4addr=${L:U:address}&network_view=${L:U:network_view}&_return_fields=extattrs"
+            },
+            "wapi": "v2.7",
+            "result": [{
+                "codes": "200,201,202,203,204",
+                "next": "Update extattrs for update Host"
+            }]
+        },
+        {
+            "name": "Get HostIPv6 _ref for modify events",
+            "operation": "GET",
+            "transport": {
+                "path": "record:host?ipv6addr=${L:U:address}&network_view=${L:U:network_view}&_return_fields=extattrs"
+            },
+            "wapi": "v2.7"
+        },
+        {
+            "name": "Update extattrs for update Host for modify events",
+            "operation": "PUT",
+            "transport": {
+                "path": "${P:A:PARSE[0]{_ref}}"
+            },
+            "wapi": "v2.7",
+            "wapi_quoting": "JSON",
+            "body_list": [
+                "{\"extattrs+\":{\"Aruba_SyncedAt\": { \"value\": \"${L:A:timestamp}\"}}}"
+            ]
+        },
+        {
+            "name": "Stop host update for modify events",
+            "operation": "CONDITION",
+            "condition": {
+                "statements": [
+                    {
+                        "left": "1",
+                        "op": "==",
+                        "right": "1"
+                    }
+                ],
+                "condition_type": "AND",
+                "stop": true
+            }
+        },
+        {
+            "name": "Update extattrs for update fixed ip for modify events",
+            "operation": "PUT",
+            "transport": {
+                "path": "${E:A:values{_ref}}"
+            },
+            "wapi": "v2.7",
+            "wapi_quoting": "JSON",
+            "body_list": [
+                "{\"extattrs+\":{\"Aruba_SyncedAt\": { \"value\": \"${L:A:timestamp}\"}}}"
+            ]
+        },
+        {
+            "name": "Stop fixedIP for modify events",
+            "operation": "CONDITION",
+            "condition": {
+                "statements": [
+                    {
+                        "left": "1",
+                        "op": "==",
+                        "right": "1"
+                    }
+                ],
+                "condition_type": "AND",
+                "stop": true
+            }
+        }
+
+
+
+    ]
+}
