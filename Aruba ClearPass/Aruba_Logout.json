@@ -1,0 +1,17 @@
+{
+    "vendor_identifier": "Aruba ClearPass",
+    "version": "3.0",
+    "name": "Aruba ClearPass Logout",
+    "content_type": "application/json",
+    "type": "REST_EVENT",
+    "event_type": [
+        "SESSION"
+    ],
+    "steps": [
+        {
+            "name": "Clear the session ID",
+            "operation": "NOP",
+            "body": "${XC:ASSIGN:{S:SESSID}:{S:}}"
+        }
+    ]
+}

@@ -1,0 +1,50 @@
+{
+    "vendor_identifier": "Aruba ClearPass",
+    "version": "3.0",
+    "name": "Aruba ClearPass Login",
+    "content_type": "application/json",
+    "type": "REST_EVENT",
+    "event_type": [
+        "SESSION"
+    ],
+    "steps": [
+        {
+            "name": "send login request",
+            "operation": "POST",
+            "parse": "JSON",
+            "headers": {
+                "X-Requested-With": "XMLHttpRequest",
+                "Content-Type": "application/json",
+                "User-Agent": "Infoblox Security Integration",
+                "Authorization": ""
+            },
+            "transport": {
+                "path": "/api/oauth"
+            },
+            "body_list": [
+                "{\"grant_type\": \"client_credentials\", \"client_secret\":\"${S:A:KEY}\",\"client_id\":\"${S:U:Client_ID}\"}"
+            ]
+        },
+        {
+            "name": "Debug",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{H:}}${XC:DEBUG:{E:}}${XC:DEBUG:{I:}}${XC:DEBUG:{L:}}${XC:DEBUG:{S:}}${XC:DEBUG:{P:}}${XC:DEBUG:{R:}}${XC:DEBUG:{RH:}}${XC:DEBUG:{UT:}}"
+        },
+        {
+            "name": "login. errorcheck",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${R:A:RC}",
+                        "op": "!=",
+                        "right": "200"
+                    }
+                ],
+                "error": true,
+                "else_eval": "${XC:COPY:{S:SESSID}:{P:access_token}}"
+            }
+        }
+    ]
+}

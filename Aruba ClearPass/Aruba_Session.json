@@ -1,0 +1,28 @@
+{
+    "name": "Aruba ClearPass Session",
+    "version": "3.0",
+    "type": "REST_ENDPOINT",
+    "inactivity_interval": 1000,
+    "keepalive": true,
+    "login_template": "Aruba ClearPass Login",
+    "logout_template": "Aruba ClearPass Logout",
+    "override_path": true,
+    "path": "",
+    "retry": 0,
+    "retry_template": 0,
+    "timeout": 60,
+    "vendor_identifier": "Aruba ClearPass",
+    "logout_only_at_template_end": true,
+    "endpoint_variables": [
+        {
+            "name": "Client_ID",
+            "type": "STRING",
+            "value": "BloxCS"
+        },
+        {
+            "name": "KEY",
+            "type": "STRING",
+            "value": "000000000000000000000000000000000000000000000"
+        }
+    ]
+}
