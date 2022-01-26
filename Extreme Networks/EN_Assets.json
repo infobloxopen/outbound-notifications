@@ -1,0 +1,1034 @@
+{
+    "name": "Extreme Networks Management Center Assets",
+    "vendor_identifier": "Extreme Networks",
+    "comment": "Extreme Networks Management Center Assets",
+    "version": "4.0",
+    "type": "REST_EVENT",
+    "event_type": [
+        "LEASE",
+        "FIXED_ADDRESS_IPV4",
+        "HOST_ADDRESS_IPV4",
+        "FIXED_ADDRESS_IPV6",
+        "HOST_ADDRESS_IPV6",
+        "DISCOVERY_DATA"
+    ],
+    "content_type": "application/xml",
+    "transport": {
+        "path": "/axis/services/NACWebService/",
+        "override_path": true
+    },
+    "headers": {
+        "Accept:": "*/*"
+    },
+    "instance_variables": [{
+            "name": "Default_End_System_Group",
+            "type": "STRING",
+            "value": "Infoblox_MAC"
+        },
+        {
+            "name": "Only_Managed_Assets",
+            "type": "STRING",
+            "value": "true"
+        }
+    ],
+    "steps": [{
+            "name": "DebugOnStart",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{H:}}${XC:DEBUG:{E:}}${XC:DEBUG:{I:}}${XC:DEBUG:{L:}}${XC:DEBUG:{S:}}${XC:DEBUG:{P:}}${XC:DEBUG:{UT:}}"
+        },
+        {
+            "name": "Skip_Object_Deletion_And_Modify",
+            "operation": "CONDITION",
+            "condition": {
+                "statements": [{
+                    "left": "${E:A:operation_type}",
+                    "op": "==",
+                    "right": "DELETE"
+                }],
+                "condition_type": "OR",
+                "stop": true
+            }
+        },
+        {
+            "name": "Check_for_Change_FixedIPv4",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                        "left": "${E:A:event_type}",
+                        "op": "==",
+                        "right": "FIXED_ADDRESS_IPV4"
+                    },
+                    {
+                        "left": "${E:A:operation_type}",
+                        "op": "==",
+                        "right": "MODIFY"
+                    },
+                    {
+                        "left": "${E:A:values{mac}}",
+                        "op": "==",
+                        "right": "${E:A:previous_values{mac}}"
+                    },
+                    {
+                        "left": "${E:A:previous_values{extattrs}{XMC_End_System_Group}}",
+                        "op": "==",
+                        "right": "${E:A:values{extattrs}{XMC_End_System_Group}}"
+                    },
+                    {
+                        "left": "${E:A:previous_values{extattrs}{XMC_Location}}",
+                        "op": "==",
+                        "right": "${E:A:values{extattrs}{XMC_Location}}"
+                    },
+                    {
+                        "left": "${E:A:values{ipv4addr}}",
+                        "op": "==",
+                        "right": "${E:A:previous_values{ipv4addr}}"
+                    }
+                ],
+                "stop": true
+            }
+        },
+        {
+            "name": "Check_for_Change_FixedIPv6",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                        "left": "${E:A:event_type}",
+                        "op": "==",
+                        "right": "FIXED_ADDRESS_IPV6"
+                    },
+                    {
+                        "left": "${E:A:operation_type}",
+                        "op": "==",
+                        "right": "MODIFY"
+                    },
+                    {
+                        "left": "${E:A:previous_values{extattrs}{XMC_End_System_Group}}",
+                        "op": "==",
+                        "right": "${E:A:values{extattrs}{XMC_End_System_Group}}"
+                    },
+                    {
+                        "left": "${E:A:previous_values{extattrs}{XMC_Location}}",
+                        "op": "==",
+                        "right": "${E:A:values{extattrs}{XMC_Location}}"
+                    },
+                    {
+                        "left": "${E:A:values{ipv6addr}}",
+                        "op": "==",
+                        "right": "${E:A:previous_values{ipv6addr}}"
+                    }
+                ],
+                "stop": true
+            }
+        },
+        {
+            "name": "Check_for_Change_On_Discovery_IPv4",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                        "left": "${E:A:values{ip_address}}",
+                        "op": "!~",
+                        "right": ":"
+                    },
+                    {
+                        "left": "${E:A:operation_type}",
+                        "op": "==",
+                        "right": "MODIFY"
+                    },
+                    {
+                        "left": "${E:A:previous_values{mac_address}}",
+                        "op": "==",
+                        "right": "${E:A:values{mac_address}}"
+                    },
+                    {
+                        "left": "${E:A:previous_values{ip_address}}",
+                        "op": "==",
+                        "right": "${E:A:values{ip_address}}"
+                    }
+                ],
+                "stop": true
+            }
+        },
+        {
+            "name": "Check_for_Change_On_Discovery_IPv6",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                        "left": "${E:A:values{ip_address}}",
+                        "op": "=~",
+                        "right": ":"
+                    },
+                    {
+                        "left": "${E:A:operation_type}",
+                        "op": "==",
+                        "right": "MODIFY"
+                    },
+                    {
+                        "left": "${E:A:values{mac_address}}",
+                        "op": "==",
+                        "right": "${E:A:previous_values{mac_address}}"
+                    },
+                    {
+                        "left": "${E:A:values{ip_address}}",
+                        "op": "==",
+                        "right": "${E:A:previous_values{ip_address}}"
+                    }
+                ],
+                "stop": true
+            }
+        },
+        {
+            "name": "Assign_Time_Value",
+            "operation": "NOP",
+            "body_list": [
+                "${XC:COPY:{L:ScanDate}:{UT:TIME}}${XC:FORMAT:TRUNCATE:{L:ScanDate}:{16t}}"
+            ]
+        },
+        {
+            "name": "Check_If_Lease",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "OR",
+                "statements": [{
+                    "left": "${E:A:event_type}",
+                    "op": "==",
+                    "right": "LEASE"
+                }],
+                "next": "Assign_Lease_E_Values_Based_On_IP"
+            }
+        },
+        {
+            "name": "Check_If_Fixed",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "OR",
+                "statements": [{
+                    "left": "${E:A:event_type}",
+                    "op": "=~",
+                    "right": "FIXED_ADDRESS"
+                }],
+                "next": "Assign_Fixed_E_Values_Based_On_IP"
+            }
+        },
+        {
+            "name": "Check_If_Discovery",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "OR",
+                "statements": [{
+                    "left": "${E:A:event_type}",
+                    "op": "==",
+                    "right": "DISCOVERY_DATA"
+                }],
+                "next": "Assign_Discovery_E_Values_Based_On_IP"
+            }
+        },
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        {
+            "name": "Assign_Host_E_Values_Based_On_IP",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "OR",
+                "statements": [{
+                    "left": "${E:A:values{ipv6addr}}",
+                    "op": "==",
+                    "right": ""
+                }],
+                "eval": "${XC:COPY:{L:RegexValue1}:{E:values{host}}}${XC:ASSIGN:{L:RegexValue2}:{S:.*record:host.*}}${XC:ASSIGN:{L:IPReq}:{S:ipv4address}}${XC:COPY:{L:member_ip}:{E:member_ip}}${XC:COPY:{L:event_type}:{E:event_type}}${XC:COPY:{L:object_type}:{E:object_type}}${XC:COPY:{L:member_name}:{E:member_name}}${XC:COPY:{L:operation_type}:{E:operation_type}}${XC:COPY:{L:host}:{E:values{host}}}${XC:COPY:{L:address}:{E:values{ipv4addr}}}${XC:COPY:{L:_ref}:{E:values{_ref}}}${XC:COPY:{L:network_view}:{E:values{network_view}}}${XC:COPY:{L:extattrs}:{E:values{extattrs}}}",
+                "else_eval": "${XC:COPY:{L:RegexValue1}:{E:values{host}}}${XC:ASSIGN:{L:RegexValue2}:{S:.*record:host.*}}${XC:ASSIGN:{L:IPReq}:{S:ipv6address}}${XC:COPY:{L:member_ip}:{E:member_ip}}${XC:COPY:{L:event_type}:{E:event_type}}${XC:COPY:{L:object_type}:{E:object_type}}${XC:COPY:{L:member_name}:{E:member_name}}${XC:COPY:{L:operation_type}:{E:operation_type}}${XC:COPY:{L:host}:{E:values{host}}}${XC:COPY:{L:address}:{E:values{ipv6addr}}}${XC:COPY:{L:_ref}:{E:values{_ref}}}${XC:COPY:{L:network_view}:{E:values{network_view}}}${XC:COPY:{L:extattrs}:{E:values{extattrs}}}",
+                "next": "Check_If_Discovery_Or_Lease_to_Skip_To_Correct_Loop",
+                "else_next": "Check_If_Discovery_Or_Lease_to_Skip_To_Correct_Loop"
+            }
+        },
+        {
+            "name": "Assign_Fixed_E_Values_Based_On_IP",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "OR",
+                "statements": [{
+                    "left": "${E:A:values{ipv6addr}}",
+                    "op": "==",
+                    "right": ""
+                }],
+                "eval": "${XC:COPY:{L:RegexValue1}:{E:values{ipv4addr}}}${XC:ASSIGN:{L:RegexValue2}:{S:.*fixedaddress.*}}${XC:ASSIGN:{L:IPReq}:{S:ipv4address}}${XC:COPY:{L:member_ip}:{E:member_ip}}${XC:COPY:{L:event_type}:{E:event_type}}${XC:COPY:{L:object_type}:{E:object_type}}${XC:COPY:{L:member_name}:{E:member_name}}${XC:COPY:{L:operation_type}:{E:operation_type}}${XC:ASSIGN:{L:host}:{S:/}}${XC:COPY:{L:address}:{E:values{ipv4addr}}}${XC:COPY:{L:_ref}:{E:values{_ref}}}${XC:COPY:{L:network_view}:{E:values{network_view}}}${XC:COPY:{L:extattrs}:{E:values{extattrs}}}",
+                "else_eval": "${XC:COPY:{L:RegexValue1}:{E:values{ipv6addr}}}${XC:ASSIGN:{L:RegexValue2}:{S:.*ipv6fixedaddress.*}}${XC:ASSIGN:{L:IPReq}:{S:ipv6address}}${XC:COPY:{L:member_ip}:{E:member_ip}}${XC:COPY:{L:event_type}:{E:event_type}${XC:COPY:{L:object_type}:{E:object_type}}${XC:COPY:{L:member_name}:{E:member_name}}${XC:COPY:{L:operation_type}:{E:operation_type}}${XC:ASSIGN:{L:host}:{S:/}}${XC:COPY:{L:address}:{E:values{ipv6addr}}}${XC:COPY:{L:_ref}:{E:values{_ref}}}${XC:COPY:{L:network_view}:{E:values{network_view}}}${XC:COPY:{L:extattrs}:{E:values{extattrs}}}",
+                "next": "Check_If_Discovery_Or_Lease_to_Skip_To_Correct_Loop",
+                "else_next": "Check_If_Discovery_Or_Lease_to_Skip_To_Correct_Loop"
+            }
+        },
+        {
+            "name": "Assign_Lease_E_Values_Based_On_IP",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "OR",
+                "statements": [{
+                    "left": "${E:A:values{ipv6addr}}",
+                    "op": "==",
+                    "right": ""
+                }],
+                "eval": "${XC:ASSIGN:{L:IPReq}:{S:ipv4address}}${XC:COPY:{L:member_ip}:{E:member_ip}}${XC:COPY:{L:event_type}:{E:event_type}}${XC:ASSIGN:{L:object_type}:{S:Lease}}${XC:COPY:{L:member_name}:{E:member_name}}${XC:COPY:{L:operation_type}:{E:binding_state}}${XC:ASSIGN:{L:host}:{S:/}}${XC:COPY:{L:address}:{E:address}}${XC:COPY:{L:network_view}:{E:network_view}}${XC:COPY:{L:extattrs}:{E:ip.extattrs}}",
+                "else_eval": "${XC:ASSIGN:{L:IPReq}:{S:ipv6address}}${XC:COPY:{L:member_ip}:{E:member_ip}}${XC:COPY:{L:event_type}:{E:event_type}}${XC:ASSIGN:{L:object_type}:{S:Lease}}${XC:COPY:{L:member_name}:{E:member_name}}${XC:COPY:{L:operation_type}:{E:binding_state}}${XC:ASSIGN:{L:host}:{S:/}}${XC:COPY:{L:address}:{E:address}}${XC:COPY:{L:network_view}:{E:network_view}}${XC:COPY:{L:extattrs}:{E:ip.extattrs}}",
+                "next": "Check_If_Discovery_Or_Lease_to_Skip_To_Correct_Loop",
+                "else_next": "Check_If_Discovery_Or_Lease_to_Skip_To_Correct_Loop"
+            }
+        },
+        {
+            "name": "Assign_Discovery_E_Values_Based_On_IP",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "OR",
+                "statements": [{
+                    "left": "${E:A:values{ipv6addr}}",
+                    "op": "==",
+                    "right": ""
+                }],
+                "eval": "${XC:ASSIGN:{L:IPReq}:{S:ipv4address}}${XC:COPY:{L:member_ip}:{E:member_ip}}${XC:COPY:{L:event_type}:{E:event_type}}${XC:COPY:{L:object_type}:{E:object_type}}${XC:COPY:{L:member_name}:{E:member_name}}${XC:COPY:{L:operation_type}:{E:operation_type}}${XC:ASSIGN:{L:host}:{S:/}}${XC:COPY:{L:address}:{E:values{ip_address}}}${XC:ASSIGN:{L:network_view}:{S:default}}",
+                "else_eval": "${XC:ASSIGN:{L:IPReq}:{S:ipv6address}}${XC:COPY:{L:member_ip}:{E:member_ip}}${XC:COPY:{L:event_type}:{E:event_type}}${XC:COPY:{L:object_type}:{E:object_type}}${XC:COPY:{L:member_name}:{E:member_name}}${XC:COPY:{L:operation_type}:{E:operation_type}}${XC:ASSIGN:{L:host}:{S:/}}${XC:COPY:{L:address}:{E:values{ip_address}}}${XC:ASSIGN:{L:network_view}:{S:default}}",
+                "next": "Check_If_Discovery_Or_Lease_to_Skip_To_Correct_Loop",
+                "else_next": "Check_If_Discovery_Or_Lease_to_Skip_To_Correct_Loop"
+            }
+        },
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        {
+            "name": "Check_If_Discovery_Or_Lease_to_Skip_To_Correct_Loop",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "OR",
+                "statements": [{
+                        "left": "${E:A:event_type}",
+                        "op": "==",
+                        "right": "LEASE"
+                    },
+                    {
+                        "left": "${E:A:event_type}",
+                        "op": "==",
+                        "right": "DISCOVERY_DATA"
+                    }
+                ],
+                "next": "Start_To_Get_Ref_For_Lease_or_Discovery"
+            }
+        },
+        {
+            "name": "Start_To_Get_Ref_For_Host_Or_Reservation",
+            "operation": "GET",
+            "transport": {
+                "path": "${L:U:IPReq}?ip_address=${L:U:address}&network_view=${L:U:network_view}&_return_fields=discovered_data,status,network,types,ip_address,mac_address,lease_state,usage,objects"
+            },
+            "wapi": "v2.7"
+        },
+        {
+            "name": "Check_If_We_Have_An_Object",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "${P:A:PARSE[0]{types}[0]}",
+                    "op": "!=",
+                    "right": "UNMANAGED"
+                }],
+                "eval": "${XC:COPY:{L:Obj_refs}:{P:PARSE[0]{objects}}}",
+                "else_stop": true
+            }
+        },
+        {
+            "name": "Check_if_an_object_list_is_empty",
+            "operation": "CONDITION",
+            "condition": {
+                "statements": [{
+                    "left": "${L:L:Obj_refs}",
+                    "op": "==",
+                    "right": "0"
+                }],
+                "condition_type": "AND",
+                "stop": true
+            }
+        },
+        {
+            "name": "Pop_object_from_the_list",
+            "operation": "VARIABLEOP",
+            "variable_ops": [{
+                "operation": "POP",
+                "type": "SINGLE",
+                "destination": "L:Ref",
+                "source": "L:Obj_refs"
+            }]
+        },
+        {
+            "name": "DebugL_For_Loop_1",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{L:}}"
+        },
+        {
+            "name": "check_an_obj_type",
+            "operation": "CONDITION",
+            "condition": {
+                "statements": [{
+                        "left": "${L:A:Ref}",
+                        "op": "=~",
+                        "right": "${L:A:RegexValue1}"
+                    },
+                    {
+                        "left": "${L:A:Ref}",
+                        "op": "=~",
+                        "right": "${L:A:RegexValue2}"
+                    }
+                ],
+                "condition_type": "AND",
+                "eval": "${XC:COPY:{L:Obj_ref}:{L:Ref}}",
+                "else_next": "Check_if_an_object_list_is_empty"
+            }
+        },
+        {
+            "name": "DebugTEST",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{H:}}${XC:DEBUG:{E:}}${XC:DEBUG:{I:}}${XC:DEBUG:{L:}}${XC:DEBUG:{S:}}${XC:DEBUG:{P:}}${XC:DEBUG:{UT:}}"
+        },
+        {
+            "name": "Check_If_DISCOVERY_DATA_And_OS_For_Host_And_Fixed",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "${P:A:PARSE[0]{discovered_data}{os}}",
+                    "op": "!=",
+                    "right": ""
+                }],
+                "eval": "${XC:COPY:{L:os}:{P:PARSE[0]{discovered_data}{os}}}",
+                "else_eval": "${XC:ASSIGN:{L:os}:{S:Null}}"
+            }
+        },
+        {
+            "name": "DebugTEST2",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{H:}}${XC:DEBUG:{E:}}${XC:DEBUG:{I:}}${XC:DEBUG:{L:}}${XC:DEBUG:{S:}}${XC:DEBUG:{P:}}${XC:DEBUG:{UT:}}"
+        },
+        {
+            "name": "check_if_we_can_use_MAC",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                        "left": "${L:A:Obj_ref}",
+                        "op": "!=",
+                        "right": ""
+                    },
+                    {
+                        "left": "${P:A:PARSE[0]{mac_address}}",
+                        "op": "!=",
+                        "right": ""
+                    }
+                ],
+                "eval": "${XC:COPY:{L:MAC}:{P:PARSE[0]{mac_address}}}",
+                "next": "Get_Extensible_attributes",
+                "else_stop": true
+            }
+        },
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        {
+            "name": "Start_To_Get_Ref_For_Lease_or_Discovery",
+            "operation": "GET",
+            "transport": {
+                "path": "${L:U:IPReq}?ip_address=${L:U:address}&network_view=${L:U:network_view}&_return_fields=discovered_data,status,network,types,ip_address,mac_address,lease_state,usage,objects"
+            },
+            "wapi": "v2.7"
+        },
+        {
+            "name": "check_if_we_have_an_object_for_Lease_or_Discovery",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "${P:A:PARSE[0]{types}[0]}",
+                    "op": "!=",
+                    "right": "UNMANAGED"
+                }],
+                "eval": "${XC:COPY:{L:Obj_refs}:{P:PARSE[0]{objects}}}",
+                "else_next": "Check_If_DISCOVERY_DATA_And_OS_Lease_And_Discovery"
+            }
+        },
+        {
+            "name": "Check_if_an_object_list_is_empty_for_Lease_or_Discovery",
+            "operation": "CONDITION",
+            "condition": {
+                "statements": [{
+                    "left": "${L:L:Obj_refs}",
+                    "op": "==",
+                    "right": "0"
+                }],
+                "condition_type": "AND",
+                "stop": true
+            }
+        },
+        {
+            "name": "Pop_object_from_the_list_for_Lease_or_Discovery",
+            "operation": "VARIABLEOP",
+            "variable_ops": [{
+                "operation": "POP",
+                "type": "SINGLE",
+                "destination": "L:Ref",
+                "source": "L:Obj_refs"
+            }]
+        },
+        {
+            "name": "DebugL_For_Loop_2",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{L:}}"
+        },
+        {
+            "name": "check_an_obj_type_for_Lease_or_Discovery",
+            "operation": "CONDITION",
+            "condition": {
+                "statements": [{
+                        "left": "${L:A:Ref}",
+                        "op": "=~",
+                        "right": "record:host.*"
+                    },
+                    {
+                        "left": "${L:A:Ref}",
+                        "op": "=~",
+                        "right": "fixedaddress.*"
+                    },
+                    {
+                        "left": "${L:A:Ref}",
+                        "op": "=~",
+                        "right": "ipv6fixedaddress.*"
+                    }
+                ],
+                "condition_type": "OR",
+                "eval": "${XC:COPY:{L:Obj_ref}:{L:Ref}}",
+                "else_next": "Check_if_an_object_list_is_empty_for_Lease_or_Discovery"
+            }
+        },
+        {
+            "name": "Check_If_DISCOVERY_DATA_And_OS_Lease_And_Discovery",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "${P:A:PARSE[0]{discovered_data}{os}}",
+                    "op": "!=",
+                    "right": ""
+                }],
+                "eval": "${XC:COPY:{L:os}:{P:PARSE[0]{discovered_data}{os}}}",
+                "else_eval": "${XC:ASSIGN:{L:os}:{S:Null}}"
+            }
+        },
+        {
+            "name": "check_if_we_can_use_MAC_for_Lease_or_Discovery",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "${P:A:PARSE[0]{mac_address}}",
+                    "op": "!=",
+                    "right": ""
+                }],
+                "eval": "${XC:COPY:{L:MAC}:{P:PARSE[0]{mac_address}}}",
+                "else_stop": true
+            }
+        },
+        {
+            "name": "Check_For_Ref",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "${L:A:Obj_ref}",
+                    "op": "==",
+                    "right": ""
+                }],
+                "next": "Check_If_Asset_Needs_To_Be_Managed"
+            }
+        },
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        {
+            "name": "Get_Extensible_attributes",
+            "operation": "GET",
+            "transport": {
+                "path": "${L:A:Obj_ref}?_return_fields=extattrs"
+            },
+            "wapi": "v2.7"
+        },
+        {
+            "name": "Debug Get output",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{E:}}${XC:DEBUG:{I:}}${XC:DEBUG:{L:}}${XC:DEBUG:{S:}}${XC:DEBUG:{P:}}"
+        },
+        {
+            "name": "Check_If_Asset_Needs_To_Be_Managed",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                        "left": "${I:A:Only_Managed_Assets}",
+                        "op": "!=",
+                        "right": "true"
+                    },
+                    {
+                        "left": "${L:A:Obj_ref}",
+                        "op": "==",
+                        "right": ""
+                    }
+                ],
+                "next": "check_EAs_2"
+            }
+        },
+        {
+            "name": "check_If_Time_Is_Empty",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "${P:A:extattrs{XMC_SyncedAt}{value}}",
+                    "op": "==",
+                    "right": ""
+                }],
+                "next": "check_EAs"
+            }
+        },
+        {
+            "name": "Assign_Time_Value_To_Check",
+            "operation": "NOP",
+            "body_list": [
+                "${XC:COPY:{L:Old_Time}:{P:extattrs{XMC_SyncedAt}{value}}}${XC:FORMAT:TRUNCATE:{L:Old_Time}:{16t}}"
+            ]
+        },
+        {
+            "name": "check_EAs",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                        "left": "${P:A:extattrs{XMC_Sync}{value}}",
+                        "op": "==",
+                        "right": "true"
+                    },
+                    {
+                        "left": "${L:A:Old_Time}",
+                        "op": "!=",
+                        "right": "${L:A:ScanDate}"
+                    }
+                ],
+                "else_stop": true
+            }
+        },
+        {
+            "name": "check_EAs_2",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "${P:A:extattrs{XMC_End_System_Group}{value}}",
+                    "op": "==",
+                    "right": ""
+                }],
+                "eval": "${XC:COPY:{L:XMC_End_System_Group}:{I:Default_End_System_Group}}",
+                "else_eval": "${XC:COPY:{L:XMC_End_System_Group}:{P:extattrs{XMC_End_System_Group}{value}}}"
+            }
+        },
+        {
+            "name": "Check_For_Location",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "${P:A:extattrs{XMC_Location}{value}}",
+                    "op": "!=",
+                    "right": ""
+                }],
+                "eval": "${XC:COPY:{L:Location}:{P:extattrs{XMC_Location}{value}}}",
+                "else_eval": "${XC:ASSIGN:{L:Location}:{S:Null}}"
+            }
+        },
+        {
+            "name": "Get_FingerPrint_If_Lease_Event",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                        "left": "${L:A:event_type}",
+                        "op": "==",
+                        "right": "LEASE"
+                    },
+                    {
+                        "left": "${E:A:fingerprint}",
+                        "op": "!=",
+                        "right": ""
+                    }
+                ],
+                "eval": "${XC:COPY:{L:fingerprint}:{E:fingerprint}}"
+            }
+        },
+        {
+            "name": "Check_If_DISCOVERY_DATA_And_OS",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "${L:A:event_type}",
+                    "op": "==",
+                    "right": "DISCOVERY_DATA"
+                }],
+                "eval": "${XC:COPY:{L:os}:{E:values{os}}}"
+            }
+        },
+        {
+            "name": "Get_Lease_Fingerprint",
+            "operation": "GET",
+            "transport": {
+                "path": "lease?address=${L:U:address}&network_view=${L:U:network_view}&_return_fields=fingerprint"
+            },
+            "wapi": "v2.7"
+        },
+        {
+            "name": "Assign_FingerPrint_If_Needed",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                        "left": "${L:A:event_type}",
+                        "op": "!=",
+                        "right": "LEASE"
+                    },
+                    {
+                        "left": "${P:A:PARSE[0]{fingerprint}}",
+                        "op": "!=",
+                        "right": ""
+                    },
+                    {
+                        "left": "${L:A:fingerprint}",
+                        "op": "==",
+                        "right": ""
+                    }
+                ],
+                "eval": "${XC:COPY:{L:fingerprint}:{P:PARSE[0]{fingerprint}}",
+                "else_eval": "${XC:ASSIGN:{L:fingerprint}:{S:Null}}"
+            }
+        },
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        {
+            "name": "Get_Lease_Fingerprint",
+            "operation": "GET",
+            "transport": {
+                "path": "lease?address=${L:U:address}&network_view=${L:U:network_view}&_return_fields=fingerprint"
+            },
+            "wapi": "v2.7"
+        },
+
+        {
+            "name": "insertMAC",
+            "operation": "GET",
+            "transport": {
+                "content_type": "",
+                "path": "addMACToEndSystemGroupWithCustomDataEx?macAddress=${L:A:MAC}&endSystemGroup=${L:A:XMC_End_System_Group}&removeFromOtherGroups=true&description=Created%20by%20Infoblox%20DDI%20at%20${UT::TIME}%20from%20${L::object_type}%20${L::address}%20${L:A:operation_type}&reauthenticate=false&custom=\"location:%20${L:U:Location}\",%20\"os:%20${L:U:os}\",%20\"fingerprint:%20${L:U:fingerprint}\""
+            },
+            "headers": {
+                "Accept": "*/*",
+                "Encoding": "UTF-8",
+                "Content-Type": "application/x-www-form-urlencoded"
+            },
+            "parse": "REGEX",
+            "parse_regex": "return>(\\d)<\\/ns:return"
+        },
+        {
+            "name": "DebugOnGet",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{H:}}${XC:DEBUG:{E:}}${XC:DEBUG:{I:}}${XC:DEBUG:{L:}}${XC:DEBUG:{S:}}${XC:DEBUG:{P:}}${XC:DEBUG:{R:}}${XC:DEBUG:{RH:}}${XC:DEBUG:{UT:}}"
+        },
+        {
+            "name": "checkInsertMAC",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "OR",
+                "statements": [{
+                        "left": "${R:A:RC}",
+                        "op": "==",
+                        "right": "200"
+                    },
+                    {
+                        "left": "${R:A:RC}",
+                        "op": "==",
+                        "right": "201"
+                    }
+                ],
+                "else_error": true
+            }
+        },
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        {
+            "name": "Check_If_Asset_Needs_To_Be_Managed_For_Posting",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                        "left": "${I:A:Only_Managed_Assets}",
+                        "op": "!=",
+                        "right": "true"
+                    },
+                    {
+                        "left": "${L:A:Obj_ref}",
+                        "op": "==",
+                        "right": ""
+                    }
+                ],
+                "next": "END"
+            }
+        },
+        {
+            "name": "Update_Extattrs",
+            "operation": "PUT",
+            "transport": {
+                "path": "${L:A:Obj_ref}"
+            },
+            "wapi": "v2.7",
+            "wapi_quoting": "JSON",
+            "body_list": [
+                "{\"extattrs+\":{\"XMC_SyncedAt\": { \"value\": \"${UT:A:TIME}\"}}}"
+            ]
+        },
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        {
+            "name": "END",
+            "operation": "NOP"
+        }
+    ]
+}

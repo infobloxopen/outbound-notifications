@@ -1,0 +1,578 @@
+{
+    "name": "Extreme Networks DNS Security",
+    "comment": "DNS Security events",
+    "version": "4.0",
+    "type": "REST_EVENT",
+    "event_type": [
+        "RPZ",
+        "TUNNEL",
+        "ADP"
+    ],
+    "action_type": "DNS Security",
+    "content_type": "application/xml",
+    "vendor_identifier": "Extreme Networks",
+    "quoting": "XMLA",
+    "instance_variables": [
+        {
+          "name": "Default_Remediate_Group",
+          "type": "STRING",
+          "value": "Infoblox_MAC"
+        }
+      ],
+    "steps": [
+        {
+            "name": "DebugOnStart",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{H:}}${XC:DEBUG:{E:}}${XC:DEBUG:{I:}}${XC:DEBUG:{L:}}${XC:DEBUG:{S:}}${XC:DEBUG:{P:}}${XC:DEBUG:{UT:}}"
+        },
+        {
+            "name": "assignLocalVars",
+            "operation": "NOP",
+            "body_list": [
+                "${XC:COPY:{L:ScanDate}:{UT:TIME}}${XC:ASSIGN:{L:Obj_ref}:{S:}}${XC:ASSIGN:{L:ReqType}:{S:Log}}"
+            ]
+        },
+        {
+            "name": "check_EA_on_IP",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${E:A:ip.extattrs{XMC_RemediateOnEvent}}",
+                        "op": "==",
+                        "right": "true"
+                    }
+                ],
+                "next": "Get_IP"
+            }
+        },
+        {
+            "name": "check_EA_on_Net",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "OR",
+                "statements": [
+                    {
+                        "left": "${E::network.extattrs{XMC_RemediateOnEvent}}",
+                        "op": "!=",
+                        "right": "true"
+                    },
+                    {
+                        "left": "${E::network.network_view}",
+                        "op": "==",
+                        "right": ""
+                    }
+                ],
+                "stop": true
+            }
+        },
+        {
+            "name": "Get_IP",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "OR",
+                "statements": [
+                    {
+                        "left": "${E:A:source_ip}",
+                        "op": "=~",
+                        "right": ":"
+                    }
+                ],
+                "eval": "${XC:ASSIGN:{L:IPv}:{S:IPv6}}${XC:ASSIGN:{L:IPReq}:{S:ipv6address}}",
+                "else_eval": "${XC:ASSIGN:{L:IPv}:{S:IPv4}}${XC:ASSIGN:{L:IPReq}:{S:ipv4address}}"
+            }
+        },
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        {
+            "name": "Get_ref",
+            "operation": "GET",
+            "transport": {
+                "path": "${L:U:IPReq}?ip_address=${E:U:source_ip}&network_view=${E:U:network.network_view}&_return_fields=discovered_data,status,network,types,ip_address,mac_address,lease_state,usage,objects"
+            },
+            "wapi": "v2.7"
+        },
+        {
+            "name": "Debug#1",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{H:}}${XC:DEBUG:{E:}}${XC:DEBUG:{I:}}${XC:DEBUG:{L:}}${XC:DEBUG:{S:}}${XC:DEBUG:{P:}}${XC:DEBUG:{UT:}}"
+        },
+        {
+            "name": "Check_if_an_object_list_is_empty",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${P:A:PARSE[0]{types}[0]}",
+                        "op": "!=",
+                        "right": "UNMANAGED"
+                    },
+                    {
+                        "left": "${P:A:PARSE[0]{objects}}}",
+                        "op": "!=",
+                        "right": ""
+                    }
+                ],
+                "eval": "${XC:COPY:{L:Obj_refs}:{P:PARSE[0]{objects}}}",
+                "else_next": "get_RemediateGroup"
+            }
+        },
+        {
+            "name": "Debug#2",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{H:}}${XC:DEBUG:{E:}}${XC:DEBUG:{I:}}${XC:DEBUG:{L:}}${XC:DEBUG:{S:}}${XC:DEBUG:{P:}}${XC:DEBUG:{UT:}}"
+        },
+        {
+            "name": "Check_if_an_object_list_is_empty#2",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${L:A:Obj_refs[0]}",
+                        "op": "!=",
+                        "right": ""
+                    }
+                ],
+                "else_next": "get_RemediateGroup"
+            }
+        },
+        {
+            "name": "Debug#3",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{H:}}${XC:DEBUG:{E:}}${XC:DEBUG:{I:}}${XC:DEBUG:{L:}}${XC:DEBUG:{S:}}${XC:DEBUG:{P:}}${XC:DEBUG:{UT:}}"
+        },
+        {
+            "name": "Pop_object_from_the_list",
+            "operation": "VARIABLEOP",
+            "variable_ops": [
+                {
+                    "operation": "POP",
+                    "type": "SINGLE",
+                    "destination": "L:Ref",
+                    "source": "L:Obj_refs"
+                }
+            ]
+        },
+        {
+            "name": "Debug#4",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{H:}}${XC:DEBUG:{E:}}${XC:DEBUG:{I:}}${XC:DEBUG:{L:}}${XC:DEBUG:{S:}}${XC:DEBUG:{P:}}${XC:DEBUG:{UT:}}"
+        },
+        {
+            "name": "DebugL",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{L:}}"
+        },
+        {
+            "name": "check_an_obj_type",
+            "operation": "CONDITION",
+            "condition": {
+                "statements": [
+                    {
+                        "left": "${L:A:Ref}",
+                        "op": "=~",
+                        "right": "record:host.*"
+                    },
+                    {
+                        "left": "${L:A:Ref}",
+                        "op": "=~",
+                        "right": "fixedaddress.*"
+                    },
+                    {
+                        "left": "${L:A:Ref}",
+                        "op": "=~",
+                        "right": "ipv6fixedaddress.*"
+                    }
+                ],
+                "condition_type": "OR",
+                "else_next": "Check_if_an_object_list_is_empty",
+                "eval": "${XC:COPY:{L:Obj_ref}:{L:Ref}}"
+            }
+        },
+        {
+            "name": "Check_If_DISCOVERY_DATA_And_OS",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${P:A:PARSE[0]{discovered_data}{os}}",
+                        "op": "!=",
+                        "right": ""
+                    }
+                ],
+                "eval": "${XC:COPY:{L:os}:{P:PARSE[0]{discovered_data}{os}}}",
+                "else_eval": "${XC:ASSIGN:{L:os}:{S:Null}}"
+            }
+        },
+        {
+            "name": "check_if_we_have_can_use_MAC",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${L:A:Obj_ref}",
+                        "op": "!=",
+                        "right": ""
+                    },
+                    {
+                        "left": "${P:A:PARSE[0]{mac_address}}",
+                        "op": "!=",
+                        "right": ""
+                    }
+                ],
+                "eval": "${XC:ASSIGN:{L:ReqType}:{S:API}}${XC:COPY:{L:MAC}:{P:PARSE[0]{mac_address}}}"
+            }
+        },
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        {
+            "name": "get_RemediateGroup",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${E:A:ip.extattrs{XMC_RemediateGroup}}",
+                        "op": "!=",
+                        "right": ""
+                    }
+                ],
+                "eval": "${XC:COPY:{L:RemediateGroup_MAC}:{E:ip.extattrs{XMC_RemediateGroup}}}",
+                "next": "get_Description_RPZ"
+            }
+        },
+        {
+            "name": "get_Default_RemediateGroup",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "Default_Remediate_Group",
+                        "op": "!=",
+                        "right": ""
+                    }
+                ],
+                "eval": "${XC:COPY:{L:RemediateGroup_MAC}:{I:Default_Remediate_Group}}",
+                "next": "get_Description_RPZ"
+            }
+        },
+        {
+            "name": "get_Description_RPZ",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${E:A:event_type}",
+                        "op": "==",
+                        "right": "RPZ"
+                    }
+                ],
+                "eval": "${XC:COPY:{L:BlockedDomain}:{E:query_name}}",
+                "next": "check_ReqType_Call"
+            }
+        },
+        {
+            "name": "get_Description_Tunnel_or_ADP",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${E:A:event_type}",
+                        "op": "==",
+                        "right": "ADP"
+                    }
+                ],
+                "eval": "${XC:COPY:{L:BlockedDomain}:{E:rule_name}}",
+                "else_eval": "${XC:COPY:{L:BlockedDomain}:{E:domain_name}}"
+            }
+        },
+        {
+            "name": "check_ReqType_Call",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${L:A:ReqType}",
+                        "op": "==",
+                        "right": "Log"
+                    }
+                ],
+                "next": "Send_via_Log"
+            }
+        },
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        {
+            "name": "Get_Extensible_attributes",
+            "operation": "GET",
+            "transport": {
+                "path": "${L:A:Obj_ref}?_return_fields=extattrs"
+            },
+            "wapi": "v2.7"
+        },
+        {
+            "name": "Check_For_Location",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${P:A:extattrs{XMC_Location}{value}}",
+                        "op": "!=",
+                        "right": ""
+                    }
+                ],
+                "eval": "${XC:COPY:{L:Location}:{P:extattrs{XMC_Location}{value}}}",
+                "else_eval": "${XC:ASSIGN:{L:Location}:{S:Null}}"
+            }
+        },
+        {
+            "name": "Get_Lease_Fingerprint",
+            "operation": "GET",
+            "transport": {
+                "path": "lease?address=${E:U:source_ip}&network_view=${E:U:network.network_view}&_return_fields=fingerprint"
+            },
+            "wapi": "v2.7"
+        },
+        {
+            "name": "Assign_FingerPrint_If_Needed",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${P:A:PARSE[0]{fingerprint}}",
+                        "op": "!=",
+                        "right": ""
+                    }
+                ],
+                "eval": "${XC:COPY:{L:fingerprint}:{P:PARSE[0]{fingerprint}}",
+                "else_eval": "${XC:ASSIGN:{L:fingerprint}:{S:Null}}"
+            }
+        },
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        
+        {
+            "name": "Send_via_API",
+            "operation": "GET",
+            "transport": {
+                "path": "/axis/services/NACWebService/addMACToEndSystemGroupWithCustomDataEx?macAddress=${L:A:MAC}&endSystemGroup=${L:A:RemediateGroup_MAC}&removeFromOtherGroups=true&description=Assigned%20by%20Infoblox%20reason%20${E:A:event_type}%20Domain:${L:U:BlockedDomain}&reauthenticate=false&custom=\"location:%20${L:U:Location}\",%20\"os:%20${L:U:os}\",%20\"fingerprint:%20${L:U:fingerprint}\"",
+                "content_type": ""
+            },
+            "headers": {
+                "Accept": "*/*"
+            },
+            "parse": "REGEX",
+            "parse_regex": "return>(\\d)<\\/ns:return"
+        },
+        {
+            "name": "DebugAPIparsing",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{H:}}${XC:DEBUG:{E:}}${XC:DEBUG:{I:}}${XC:DEBUG:{L:}}${XC:DEBUG:{S:}}${XC:DEBUG:{P:}}${XC:DEBUG:{UT:}}${XC:DEBUG:{R:}}"
+        },
+        {
+            "name": "check_Response_API",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${R:A:RC}",
+                        "op": "!=",
+                        "right": "200"
+                    }
+                ],
+                "error": true
+            }
+        },
+        {
+            "name": "check_if_can_update",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${L:A:Obj_ref}",
+                        "op": "==",
+                        "right": ""
+                    }
+                ],
+                "stop": true,
+                "else_next": "UpdateEAs"
+            }
+        },
+        {
+            "name": "Send_via_Log",
+            "operation": "POST",
+            "transport": {
+                "path": "/connect/LogForwarding"
+            },
+            "body_list": [
+                "{",
+                    "Infoblox: -threatIpAddress=${E:A:source_ip} -threatName=\"Reason: ${E:A:event_type}, Domain: ${L:A:BlockedDomain}\"",
+                "}"
+            ]
+        },
+        {
+            "name": "check_Response_Log",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${R:A:RC}",
+                        "op": "!=",
+                        "right": "200"
+                    }
+                ],
+                "error": true
+            }
+        },
+        {
+            "name": "check_if_can_update_after_Log",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "${L:A:Obj_ref}",
+                        "op": "==",
+                        "right": ""
+                    }
+                ],
+                "stop": true
+            }
+        },
+        {
+            "name": "UpdateEAs",
+            "operation": "PUT",
+            "transport": {
+                "path": "${L:A:Obj_ref}"
+            },
+            "wapi": "v2.7",
+            "wapi_quoting": "JSON",
+            "body_list": [
+                "{",
+                "\"extattrs+\":{\"XMC_RemediatedAt\": { \"value\": \"${L:A:ScanDate}\"}}",
+                "}"
+            ]
+        },
+        {
+            "name": "END",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [
+                    {
+                        "left": "1",
+                        "op": "==",
+                        "right": "1"
+                    }
+                ],
+                "stop": true
+            }
+        }
+    ]
+}
