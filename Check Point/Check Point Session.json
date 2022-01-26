@@ -1,0 +1,25 @@
+{
+    "name": "Check Point Session",
+    "comment": "Check Point Session template",
+    "version": "5.0",
+    "type": "REST_ENDPOINT",
+    "vendor_identifier": "Check Point",
+    "path": "/web_api",
+    "login_template": "Check Point Login",
+    "logout_template": "Check Point Logout",
+    "override_path": true,
+    "session_duration": 600000,
+    "logout_status_code": 401,
+    "endpoint_variables": [
+        {
+            "name": "CP_AssetGroup",
+            "type": "STRING",
+            "value": "AssetGroup"
+        },
+        {
+            "name": "CP_SecurityGroup",
+            "type": "STRING",
+            "value": "SecurityGroup"
+        }
+    ]
+}

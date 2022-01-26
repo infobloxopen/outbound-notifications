@@ -1,0 +1,18 @@
+{
+	"name": "Check Point Logout",
+	"comment": "Logout of Check Point.",
+	"vendor_identifier": "Check Point",
+	"version": "5.0",
+	"content_type": "application/json",
+	"quoting": "XMLA",
+	"type": "REST_EVENT",
+	"event_type": ["SESSION"],
+	"steps": 
+	[
+		{
+			"name": "setSIDEmpty",
+			"body": "${XC:ASSIGN:{S:SID}:{S:}}",
+			"operation": "NOP"
+		}
+	]
+}

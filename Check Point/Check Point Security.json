@@ -1,0 +1,421 @@
+{
+    "name": "Check Point Security",
+    "comment": "Check Point Security Management",
+    "version": "5.0",
+    "type": "REST_EVENT",
+    "event_type": [
+        "RPZ",
+        "ADP",
+        "TUNNEL"
+    ],
+    "content_type": "application/json",
+    "vendor_identifier": "Check Point",
+    "quoting": "XMLA",
+    "headers": {
+        "Content-Type": "application/json",
+        "X-chkp-sid": "${S:A:SID}"
+    },
+    "steps": [
+		{
+            "name": "DebugStart",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{H:}}${XC:DEBUG:{E:}}${XC:DEBUG:{I:}}${XC:DEBUG:{L:}}${XC:DEBUG:{S:}}${XC:DEBUG:{P:}}${XC:DEBUG:{R:}}${XC:DEBUG:{RH:}}${XC:DEBUG:{UT:}}"
+        },
+
+
+
+
+        {
+            "name": "verifyIPEAs",
+            "comment": "Verify EAs on an existing IP. If empty, it is assumed the IP does not exist in Infoblox (or is missing the necessary EAs), so check the network EAs.",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "${E:A:ip.extattrs{CP_SecuritySync}}",
+                    "op": "==",
+                    "right": "true"
+                }],
+                "eval": "${XC:ASSIGN:{L:ExtAttrsSource}:{S:IP}}",
+                "next": "checkEvent"
+            }
+        },
+
+        {
+            "name": "verifyNetworkEAs",
+            "comment": "Verify EAs on the parent network of the IP for which the event occurs. The network must exist and contain nonempty EAs.",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "${E:A:network.extattrs{CP_SecuritySync}}",
+                    "op": "==",
+                    "right": "true"
+                }],
+                "eval": "${XC:ASSIGN:{L:ExtAttrsSource}:{S:Network}}",
+                "else_stop": true
+            }
+        },
+        {
+            "name": "checkEvent",
+            "comment": "Check for desired event type.",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "OR",
+                "statements": [{
+                        "left": "${E::event_type}",
+                        "op": "==",
+                        "right": "TUNNEL"
+                    },
+                    {
+                        "left": "${E::event_type}",
+                        "op": "==",
+                        "right": "RPZ"
+                    },
+                    {
+                        "left": "${E::event_type}",
+                        "op": "==",
+                        "right": "ADP"
+                    }
+                ],
+                "eval": "${XC:COPY:{L:timestamp}:{E:timestamp}}${XC:COPY:{L:ThisIP}:{E:source_ip}}${XC:COPY:{L:ThisName}:{E:source_ip}}",
+                "else_stop": true
+            }
+        },
+        {
+            "name": "formatThisSecurityTimestamp",
+            "comment": "Format the event (this) timestamp to a string so we can truncate it to the tenth second.",
+            "operation": "NOP",
+            "body_list": [
+                "${XC:COPY:{L:ThisFormattedTimestamp}:{L:timestamp}}${XC:FORMAT:DATE_EPOCH:{L:ThisFormattedTimestamp}}${XC:FORMAT:DATE_STRFTIME:{L:ThisFormattedTimestamp}:{%a, %d %b %Y %H:%M:%S}}${XC:FORMAT:TRUNCATE:{L:ThisFormattedTimestamp}:{-1t}}"
+            ]
+        },
+        {
+            "name": "formatLastSecurityTimestamp",
+            "comment": "If the timestamp EA is empty there is no need to check the last time it has been scanned. Format the CP_SecurityTimestamp EA timestamp to a string so we can truncate it to the tenth second.",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "${E:A:ip.extattrs{CP_SecurityTimestamp}}",
+                    "op": "==",
+                    "right": ""
+                }],
+                "next": "checkIPv6Address",
+                "else_eval": "${XC:COPY:{L:LastFormattedTimestamp}:{E:ip.extattrs{CP_SecurityTimestamp}}}${XC:FORMAT:DATE_EPOCH:{L:LastFormattedTimestamp}}${XC:FORMAT:DATE_STRFTIME:{L:LastFormattedTimestamp}:{%a, %d %b %Y %H:%M:%S}}${XC:FORMAT:TRUNCATE:{L:LastFormattedTimestamp}:{-1t}}"
+            }
+        },
+        {
+            "name": "compareTimestamps",
+            "comment": "If this timestamp and the last one have the same seconds tens place, stop the template.",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "${L:A:ThisFormattedTimestamp}",
+                    "op": "==",
+                    "right": "${L:A:LastFormattedTimestamp}"
+                }],
+                "stop": true
+            }
+        },
+        {
+            "name": "checkIPv6Address",
+            "comment": "Check if source_ip is IPv6. We need to use differently named fields for requests later depending on the type.",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "${E:A:source_ip}",
+                    "op": "=~",
+                    "right": ":"
+                }],
+                "eval": "${XC:ASSIGN:{L:IPvTypeForIP}:{S:ipv6address}}${XC:ASSIGN:{L:IPvTypeForRef}:{S:ipv6addr}}",
+                "else_eval": "${XC:ASSIGN:{L:IPvTypeForIP}:{S:ipv4address}}${XC:ASSIGN:{L:IPvTypeForRef}:{S:ipv4addr}}"
+            }
+        },
+        {
+            "name": "skipObjectCheckingIfNetwork",
+            "comment": "If the EAs come from the network, we can't update any EAs because the IP does not exist in Infoblox (or is missing the necessary EAs).",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "${L:A:ExtAttrsSource}",
+                    "op": "==",
+                    "right": "Network"
+                }],
+                "next": "getExistingHost"
+            }
+        },
+        {
+            "name": "getIPData",
+            "comment": "Get data of the IP. We need the list of objects on it.",
+            "operation": "GET",
+            "wapi": "v2.9",
+            "transport": {
+                "path": "${L:A:IPvTypeForIP}?ip_address=${L:A:ThisIP}&network_view=${E:A:network.network_view}"
+            }
+        },
+        {
+            "name": "setIPData",
+            "comment": "Set objects list to local.",
+            "operation": "NOP",
+            "body": "${XC:COPY:{L:Objects}:{P:PARSE[0]{objects}}}"
+        },
+        {
+            "name": "isEmptyobjects",
+            "comment": "[START OBJECT LOOP] Check if we are out of objects in the Objects list to check.",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "${L:L:Objects}",
+                    "op": "==",
+                    "right": "0"
+                }],
+                "stop": true
+            }
+        },
+        {
+            "name": "getNextObject",
+            "comment": "[OBJECT LOOP] Pop top of Objects list.",
+            "operation": "VARIABLEOP",
+            "variable_ops": [{
+                "operation": "UNSHIFT",
+                "type": "SINGLE",
+                "destination": "L:ThisObject",
+                "source": "L:Objects"
+            }]
+        },
+        {
+            "name": "checkObjectHost",
+            "comment": "[OBJECT LOOP] Check if the object type matches HOST.",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "${L:A:ThisObject}",
+                    "op": "=~",
+                    "right": "host"
+                }],
+                "eval": "${XC:ASSIGN:{L:Path}:{S:record:host}}",
+                "next": "get_ref"
+            }
+        },
+        {
+            "name": "checkObjectFixedIPv4",
+            "comment": "[OBJECT LOOP] Check if the object type matches FIXED and IPv4.",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                        "left": "${L:A:ThisObject}",
+                        "op": "=~",
+                        "right": "fixed"
+                    },
+                    {
+                        "left": "${L:A:ThisIP}",
+                        "op": "!~",
+                        "right": ":"
+                    }
+                ],
+                "eval": "${XC:ASSIGN:{L:Path}:{S:fixedaddress}}",
+                "next": "get_ref"
+            }
+        },
+        {
+            "name": "checkObjectFixedIPv6",
+            "comment": "[OBJECT LOOP] Check if the object type matches FIXED and IPv6.",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                        "left": "${L:A:ThisObject}",
+                        "op": "=~",
+                        "right": "fixed"
+                    },
+                    {
+                        "left": "${L:A:ThisIP}",
+                        "op": "=~",
+                        "right": ":"
+                    }
+                ],
+                "eval": "${XC:ASSIGN:{L:Path}:{S:ipv6fixedaddress}}",
+                "next": "get_ref"
+            }
+        },
+        {
+            "name": "loopBackForNextObject",
+            "comment": "[END OBJECT LOOP] Go back to the beginning of the loop to check for more objects.",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "1",
+                    "op": "==",
+                    "right": "1"
+                }],
+                "next": "isEmptyobjects"
+            }
+        },
+        {
+            "name": "get_ref",
+            "comment": "Get object reference so we can update its EAs. We will use the top (most recent) fixed/host object in the list.",
+            "operation": "GET",
+            "wapi": "v2.9",
+            "transport": {
+                "path": "${L:A:Path}?${L:A:IPvTypeForRef}=${L:A:ThisIP}&network_view=${E:A:network.network_view}"
+            }
+        },
+        {
+            "name": "isEmpty_ref",
+            "operation": "CONDITION",
+            "comment": "Verify  _ref is not empty.",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "${P:A:PARSE[0]{_ref}}",
+                    "op": "==",
+                    "right": ""
+                }],
+                "stop": true,
+                "else_eval": "${XC:COPY:{L:Obj_ref}:{P:PARSE[0]{_ref}}}"
+            }
+		},
+		{
+			"name":"checkAddByHostName",
+			"operation": "CONDITION",
+			"comment":"Verify if the event involves a HOST that was added by NAME, if true assign hostname to ThisName",
+			"condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "${E:A:ip.names[0]}",
+                    "op": "!=",
+					"right": ""
+				},
+				{
+					"left": "${E:A:ip.extattrs{CP_AddByHostName}}",
+					"op": "==",
+					"right": "true"
+				}],
+				"eval": "${XC:COPY:{L:ThisName}:{E:ip.names[0]}}"
+			}
+		},
+		{
+            "name": "Debug1",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{H:}}${XC:DEBUG:{E:}}${XC:DEBUG:{I:}}${XC:DEBUG:{L:}}${XC:DEBUG:{S:}}${XC:DEBUG:{P:}}${XC:DEBUG:{R:}}${XC:DEBUG:{RH:}}${XC:DEBUG:{UT:}}"
+        },
+        {
+            "name": "getExistingHost",
+            "comment": "Check if a Host named with its IP already exists in CP. If so, we cannot add a new host to CP as it will throw an error saying the host already exists, so we must set the existing one to exist in the security group.",
+            "parse": "JSON",
+            "operation": "POST",
+            "transport": {
+                "path": "/show-host"
+            },
+            "body_list": [
+                "{",
+                " \"name\": \"${L:A:ThisName}\"",
+                "}"
+            ],
+            "result": [{
+                "codes": "404, 200",
+                "next": "parseReturnBody"
+            }]
+        },
+        {
+            "name": "parseReturnBody",
+            "operation": "CONDITION",
+            "comment": "Check return code. Check both the code and message just for extra verification.",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                        "left": "${P:A:code}",
+                        "op": "==",
+                        "right": "generic_err_object_not_found"
+                    },
+                    {
+                        "left": "${P:A:message}",
+                        "op": "=~",
+                        "right": "not found"
+                    }
+                ],
+                "eval": "${XC:ASSIGN:{L:HostPath}:{S:add-host}}",
+                "else_eval": "${XC:ASSIGN:{L:HostPath}:{S:set-host}}"
+            }
+        },
+        {
+            "name": "addOrSetHost",
+            "comment": "If the IP name does exist, put host in security group. If not, add a new host and put in security group.",
+            "parse": "JSON",
+            "operation": "POST",
+            "transport": {
+                "path": "/${L:A:HostPath}"
+            },
+            "body_list": [
+                "{",
+                " \"name\": \"${L:A:ThisName}\",",
+                " \"ip-address\": \"${L:A:ThisIP}\",",
+                " \"groups\": \"CP_SecurityGroup\",",
+                " \"ignore-warnings\": true ",
+                "}"
+            ]
+        },
+		{
+            "name": "forcePublish",
+            "comment": "Publish any changes in Check Point",
+            "parse": "JSON",
+            "operation": "POST",
+            "transport": {
+                "path": "/publish"
+            },
+            "body_list": [
+                "{",
+                "}"
+            ]
+        },
+        {
+            "name": "skipEAUpdatingIfNetwork",
+            "comment": "If the EAs come from the network, we can't update any EAs because the IP does not exist in Infoblox (or is missing the necessary EAs).",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "${L:A:ExtAttrsSource}",
+                    "op": "==",
+                    "right": "Network"
+                }],
+                "stop": true
+            }
+        },
+        {
+            "name": "updateSecurity_SyncedAtTimestamp",
+            "comment": "Use the Obj_ref local as the path to update the CP_SecurityTimestamp EA of added asset.",
+            "operation": "PUT",
+            "wapi": "v2.9",
+            "wapi_quoting": "JSON",
+            "transport": {
+                "path": "${L:A:Obj_ref}"
+            },
+            "body_list": [
+                "{\"extattrs+\":{\"CP_SecurityTimestamp\":{\"value\":\"${L:A:timestamp}\"}}}"
+            ]
+        },
+        {
+            "name": "haltTemplate",
+            "comment": "Halt template cleanly.",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "1",
+                    "op": "==",
+                    "right": "1"
+                }],
+                "stop": true
+            }
+        }
+    ]
+}

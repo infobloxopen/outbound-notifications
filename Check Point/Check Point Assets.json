@@ -1,0 +1,1079 @@
+{
+    "name": "CheckPoint Assets",
+    "comment": "Check Point Asset Template for NIOS 8.4 Outbound API",
+    "version": "5.0",
+    "type": "REST_EVENT",
+    "event_type": [
+        "DISCOVERY_DATA",  
+        "FIXED_ADDRESS_IPV4",
+        "FIXED_ADDRESS_IPV6",
+        "HOST_ADDRESS_IPV4",
+        "HOST_ADDRESS_IPV6",
+        "LEASE",
+        "NETWORK_IPV4",
+        "NETWORK_IPV6",
+        "RANGE_IPV4",
+        "RANGE_IPV6"
+    ],
+    "content_type": "application/json",
+    "vendor_identifier": "Check Point",
+    "quoting": "XMLA",
+    "headers": {
+        "Content-Type": "application/json",
+        "X-chkp-sid": "${S:A:SID}"
+    },
+    "steps": [
+        {
+            "name": "DebugStart",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{H:}}${XC:DEBUG:{E:}}${XC:DEBUG:{I:}}${XC:DEBUG:{L:}}${XC:DEBUG:{S:}}${XC:DEBUG:{P:}}${XC:DEBUG:{R:}}${XC:DEBUG:{RH:}}${XC:DEBUG:{UT:}}"
+        },
+
+
+
+
+        {
+            "name": "verifyEAs",
+            "comment": "Verify that EAs exist, or that the event is DISCOVERY or LEASE. If true, store timestamps. Otherwise, halt template.",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "OR",
+                "statements": [{
+                    "left": "${E:A:values{extattrs}{CP_AssetSync}{value}}",
+                    "op": "==",
+                    "right": "true"
+                },
+                {
+                    "left": "${E::event_type}",
+                    "op": "=~",
+                    "right": "DISCOVERY_DATA"
+                },
+                {
+                    "left": "${E::event_type}",
+                    "op": "=~",
+                    "right": "LEASE"
+                }],
+                "eval": "${XC:COPY:{L:timestamp}:{E:timestamp}}",
+                "else_stop": true
+            }
+        },
+
+
+
+
+        {
+            "name": "formatThisAssetTimestamp",
+            "comment": "Format the event (this) timestamp to a string so we can truncate it to the tenth second.",
+            "operation": "NOP",
+            "body_list": [
+                "${XC:COPY:{L:ThisFormattedTimestamp}:{L:timestamp}}${XC:FORMAT:DATE_EPOCH:{L:ThisFormattedTimestamp}}${XC:FORMAT:DATE_STRFTIME:{L:ThisFormattedTimestamp}:{%a, %d %b %Y %H:%M:%S}}${XC:FORMAT:TRUNCATE:{L:ThisFormattedTimestamp}:{-1t}}"
+            ]
+        },
+        {
+            "name": "formatLastAssetTimestamp",
+            "comment": "If the timestamp EA is empty there is no need to check the last time it has been scanned. Format the CP_AssetTimestamp EA timestamp to a string so we can truncate it to the tenth second.",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "${E:A:values{extattrs}{CP_AssetTimestamp}{value}}",
+                    "op": "==",
+                    "right": ""
+                }],
+                "next": "checkForDiscovery",
+                "else_eval": "${XC:COPY:{L:LastFormattedTimestamp}:{E:values{extattrs}{CP_AssetTimestamp}{value}}}${XC:FORMAT:DATE_EPOCH:{L:LastFormattedTimestamp}}${XC:FORMAT:DATE_STRFTIME:{L:LastFormattedTimestamp}:{%a, %d %b %Y %H:%M:%S}}${XC:FORMAT:TRUNCATE:{L:LastFormattedTimestamp}:{-1t}}"
+            }
+        },
+        {
+            "name": "compareTimestamps",
+            "comment": "If this timestamp and the last one have the same seconds tens place, stop the template.",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "${L:A:ThisFormattedTimestamp}",
+                    "op": "==",
+                    "right": "${L:A:LastFormattedTimestamp}"
+                }],
+                "stop": true
+            }
+        },
+
+
+
+
+        {
+            "name": "checkForDiscovery",
+            "comment": "START OF EVENT TYPE CHECKS ----- check for DISCOVERY events. If true, store address data, and go to add address steps.",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "${E::event_type}",
+                    "op": "=~",
+                    "right": "DISCOVERY_DATA"
+                }],
+                "eval": "${XC:COPY:{L:ThisObject}:{E:values{ip_address}}}${XC:COPY:{L:ThisIP}:{E:values{ip_address}}${XC:ASSIGN:{L:network_view}:{S:default}}${XC:ASSIGN:{L:network_view}:{S:default}}",
+                "next": "addAddress"
+            }
+        },
+        {
+            "name": "checkForHostOrFixed",
+            "comment": "check for Host or Fixed events. If true, go to Host and Fixed steps.",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "OR",
+                "statements": 
+                [{
+                    "left": "${E::event_type}",
+                    "op": "=~",
+                    "right": "HOST"
+                },
+                {
+                    "left": "${E::event_type}",
+                    "op": "=~",
+                    "right": "FIXED"
+                }],
+                "next":"checkIPv6AddressHostFixed"
+            }
+        },        
+        {
+            "name": "checkForLease",
+            "comment": "Check for LEASE event type. If true, go to LEASE steps.",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "${E::event_type}",
+                    "op": "==",
+                    "right": "LEASE"
+                }],
+                "next": "checkLeaseState",
+                "eval": "${XC:COPY:{L:network_view}:{E:network_view}}"
+            }
+        }, 
+        {
+            "name": "checkForNetwork",
+            "comment": "Check if the event is a NETWORK event. If true, go to NETWORK steps.",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "${E::event_type}",
+                    "op": "=~",
+                    "right": "NETWORK"
+                }],
+                "next": "prepareMask"
+            }
+        },        
+        {
+            "name": "checkForRange",
+            "comment": "Check if the event is a RANGE event. If true, store variables and go to RANGE steps. Halt template if no prior steps match",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "${E::event_type}",
+                    "op": "=~",
+                    "right": "RANGE"
+                }],
+                "eval": "${XC:COPY:{L:StartIP}:{E:values{start_addr}}}${XC:COPY:{L:EndIP}:{E:values{end_addr}}}",
+                "next": "checkOperationTypeRange",
+                "else_stop": true
+            }
+        }, 
+
+
+
+
+        {
+            "name": "checkIPv6AddressHostFixed",
+            "comment": "START OF HOST & FIXED STEPS ------ Check if HOST or FIXED address is an IPv6.",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "${E:A:event_type}",
+                    "op": "=~",
+                    "right": "IPV6"
+                }],
+                "eval": "${XC:ASSIGN:{L:IPvTypeForObjectData}:{S:ipv6address}}${XC:ASSIGN:{L:IPvTypeForRef}:{S:ipv6addr}}${XC:COPY:{L:ThisIP}:{E:values{ipv6addr}}${XC:COPY:{L:ThisObject}:{E:values{ipv6addr}}}${XC:COPY:{L:ThisObject}:{E:values{ipv6addr}}}",
+                "else_eval": "${XC:ASSIGN:{L:IPvTypeForObjectData}:{S:ipv4address}}${XC:ASSIGN:{L:IPvTypeForRef}:{S:ipv4addr}}${XC:COPY:{L:ThisIP}:{E:values{ipv4addr}}}${XC:COPY:{L:ThisObject}:{E:values{ipv4addr}}}${XC:COPY:{L:ThisObject}:{E:values{ipv4addr}}}"
+            }
+        },          
+        { 
+            "name": "checkAddByHostName",
+            "comment": "check if the Host entry is being added to Check Point by name or not. Saves Hostname to ThisObject if the event is a HOST event, and EA is set true",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                        "left": "${E:A:values{extattrs}{CP_AddByHostName}{value}}",
+                        "op": "=~",
+                        "right": "true"
+                    },
+                    {
+                        "left": "${E::event_type}",
+                        "op": "=~",
+                        "right": "HOST"
+                    }
+                ],
+                "eval": "${XC:COPY:{L:ThisObject}:{E:values{host}}"
+            }
+        },
+        {
+            "name":"checkModifyHostAndFixed",
+            "comment": "If the Operation type is a MODIFY, begin steps to update object in Check Point. If other, jump to DELETE check",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "${E::operation_type}",
+                    "op": "==",
+                    "right": "MODIFY"
+                }],
+                "else_next":"checkDeleteHostAndFixed"
+            }
+        },
+        {   
+        "name": "checkModifyIPv6AddressHostFixed",
+            "comment": "Check if MODIFY event contains IPv6 or IPV4.",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "${E:A:event_type}",
+                    "op": "=~",
+                    "right": "IPV6"
+                }], 
+                "eval":"${XC:COPY:{L:OldObject}:{E:previous_values{ipv6addr}}",  
+                "else_eval":"${XC:COPY:{L:OldObject}:{E:previous_values{ipv4addr}}"
+            }
+        },
+        { 
+            "name": "checkAddByHostNameModify",
+            "comment": "check if the Host entry was added to Check Point by hostname or not. Saves Hostname to oldObject if the event is a HOST event, and EA is set true. For use with SET-HOST.",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                        "left": "${E:A:values{extattrs}{CP_AddByHostName}{value}}",
+                        "op": "=~",
+                        "right": "true"
+                    },
+                    {
+                        "left": "${E::event_type}",
+                        "op": "=~",
+                        "right": "HOST"
+                    }
+                ],
+                "eval": "${XC:COPY:{L:OldObject}:{E:values{host}}"
+            }
+        },
+        {
+            "name": "DebugStart1",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{H:}}${XC:DEBUG:{E:}}${XC:DEBUG:{I:}}${XC:DEBUG:{L:}}${XC:DEBUG:{S:}}${XC:DEBUG:{P:}}${XC:DEBUG:{R:}}${XC:DEBUG:{RH:}}${XC:DEBUG:{UT:}}"
+        },    
+        {
+            "name": "updateObjectForHostFixed",
+            "comment": "Update the existing object in Check Point for MODIFY events.",
+            "parse": "JSON",
+            "operation": "POST",
+            "transport": {
+                "path": "/set-host"
+            },
+            "body_list": [
+                "{",
+                "\"name\": \"${L:A:OldObject}\", \"new-name\": \"${L:A:ThisObject}\", \"ip-address\": \"${L:A:ThisIP}\" ",
+                "}"
+            ]
+        }, 
+        {
+            "name": "endModifyHostFixed",
+            "comment": "Complete MODIFY by going to skipDeletingIfAdding for HOST or FIXED events",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "1",
+                    "op": "==",
+                    "right": "1"
+                }],
+                "next": "skipDeletingIfAdding"
+            }
+        }, 
+        {
+            "name": "checkDeleteHostAndFixed",
+            "comment": "Check for DELETE.",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "${E::operation_type}",
+                    "op": "==",
+                    "right": "DELETE"
+                }],
+                "next":"removeFromGroup",
+                "else_next": "addAddress"
+            }
+        },
+
+
+
+
+        {
+            "name": "checkLeaseState",
+            "comment": "START OF LEASE STEPS ------ Check binding state of LEASE for ACTIVE (insertion), FREE, EXPIRED or RELEASED (deletion). All other LEASE states are not supported.",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "OR",
+                "statements": [{
+                        "left": "${E::binding_state}",
+                        "op": "==",
+                        "right": "ACTIVE"
+                    },
+                    {
+                        "left": "${E::binding_state}",
+                        "op": "==",
+                        "right": "FREE"
+                    },
+                    {
+                        "left": "${E::binding_state}",
+                        "op": "==",
+                        "right": "RELEASED"
+                    },
+                    {
+                        "left": "${E::binding_state}",
+                        "op": "==",
+                        "right": "EXPIRED"
+                    }
+                ],
+                "else_stop": true
+            }
+        },        
+        {
+            "name": "checkIPv6AddressLease",
+            "comment": "Check for an IPv6 Lease event, store IPv4 or IPv6 address depending on the outcome.",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "${E:A:address}",
+                    "op": "=~",
+                    "right": ":"
+                }],
+                "eval": "${XC:ASSIGN:{L:IPvTypeForObjectData}:{S:ipv6address}}${XC:COPY:{L:ThisIP}:{E:address}}${XC:COPY:{L:ThisObject}:{E:address}}",
+                "else_eval": "${XC:ASSIGN:{L:IPvTypeForObjectData}:{S:ipv4address}}${XC:COPY:{L:ThisIP}:{E:address}}${XC:COPY:{L:ThisObject}:{E:address}}"
+            }
+        },
+        {
+            "name": "verifyLeaseSync",
+            "comment": "Verify Sync for the IP the LEASE is leased to.",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "OR",
+                "statements": [{
+                    "left": "${E:A:ip.extattrs{CP_AssetSync}}",
+                    "op": "==",
+                    "right": "true"
+                },
+                {
+                    "left": "${E:A:network.extattrs{CP_AssetSync}}",
+                    "op": "==",
+                    "right": "true"
+                }],
+                "else_stop": true
+            }
+        },
+        {
+            "name": "getIPData",
+            "comment": "Get asset data of the IP. We will need to check the objects on the IP.",
+            "operation": "GET",
+            "wapi": "v2.7",
+            "transport": {
+                "path": "${L:A:IPvTypeForObjectData}?ip_address=${L:A:ThisIP}"
+            }
+        },
+        {
+            "name": "skipisEmptyIPIfActive",
+            "comment": "We don't need to check the next step if the binding_state is ACTIVE.",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "${E::binding_state}",
+                    "op": "==",
+                    "right": "ACTIVE"
+                }],
+                "next": "setObj_ref"
+            }
+        },
+        {
+            "name": "isEmptyIPDelete",
+            "comment": "Check if other objects exist on the IP. If not, we can delete it. There are two conditions here because the previous GET step will return different values if {objects} is empty depending on the box of which the IP exists.",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "OR",
+                "statements": [{
+                        "left": "${P:A:PARSE[0]{objects}}",
+                        "op": "==",
+                        "right": ""
+                    },
+                    {
+                        "left": "${P:A:PARSE[0]{objects}}",
+                        "op": "==",
+                        "right": "[]"
+                    }
+                ],
+                "next": "removeFromGroup",
+                "else_stop": true
+            }
+        },
+        {
+            "name": "setObj_ref",
+            "comment": "Set the first object in objects to Obj_ref to use with EA updating, or set to an empty string if empty so the template will halt at isEmpty_ref.",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "${P:A:PARSE[0]{objects}[0]}",
+                    "op": "==",
+                    "right": ""
+                }],
+                "eval": "${XC:ASSIGN:{L:Obj_ref}:{S:}}",
+                "else_eval": "${XC:COPY:{L:Obj_ref}:{P:PARSE[0]{objects}[0]}}}"
+            }
+        },
+        {
+            "name": "skipAddingIfDeleting",
+            "comment": "Check for DELETE/Non-ACTIVE lease binding state.. We don't want to add an address if we are deleting.",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "OR",
+                "statements": [{
+                        "left": "${E::operation_type}",
+                        "op": "==",
+                        "right": "DELETE"
+                    },
+                    {
+                        "left": "${E::binding_state}",
+                        "op": "!=",
+                        "right": "ACTIVE"
+                    }
+                ],
+                "next": "removeFromGroup",
+                "else_next": "addAddress"
+            }
+        },
+        
+
+
+
+        {
+            "name": "prepareMask",
+            "comment": "START OF NETWORK STEPS ----- Dissects IP from Subnet mask allowing for adding and deleting networks in Check Point",
+            "operation": "VARIABLEOP",
+            "variable_ops": [{
+                "operation": "ASSIGN",
+                "type": "DICTIONARY",
+                "destination": "L:SplitConfig",
+                "keys": [
+                    "parse",
+                    "regex"
+                ],
+                "values": [
+                    "REGEXSPLIT",
+                    "/"
+                ]
+            }]
+        }, 
+        {
+            "name": "instantiateCIDRvar",
+            "operation": "NOP",
+            "body": "${XC:COPY:{L:NetCiDR}:{E:values{network}}"
+        },
+        {
+            "name": "Variable_To_Hold_Network_And_Mask",
+            "operation": "NOP",
+            "body": "${XC:PARSE:{L:SplitConfig}:{L:NetCiDR}}"
+        },
+        {
+            "name": "checkOperationTypeNetwork",
+            "comment": "check for DELETE operation for NETWORK events",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                        "left": "${E::operation_type}",
+                        "op": "==",
+                        "right": "DELETE"
+                    },
+                    {
+                        "left": "${E::event_type}",
+                        "op": "=~",
+                        "right": "NETWORK"
+                    }
+                ],
+                "next": "removeNetworkFromGroup",
+                "else_next":"addNetwork"
+            }
+        },
+
+        
+
+
+        
+        {
+            "name": "checkOperationTypeRange",
+            "comment": "START OF RANGE STEPS ----- check for DELETE operation for RANGE events",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                        "left": "${E::operation_type}",
+                        "op": "==",
+                        "right": "DELETE"
+                    },
+                    {
+                        "left": "${E::event_type}",
+                        "op": "=~",
+                        "right": "RANGE"
+                    }
+                ],
+                "next": "removeRangeFromGroup"
+            }
+        },
+        {
+            "name":"checkModifyRange",
+            "comment": "If the Operation type is a MODIFY, begin steps to update object in Check Point. If other, jump to adding range",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "${E::operation_type}",
+                    "op": "==",
+                    "right": "MODIFY"
+                }],
+                "eval":"${XC:COPY:{L:OldStartIP}:{E:previous_values{start_addr}}}${XC:COPY:{L:OldEndIP}:{E:previous_values{end_addr}}}",
+                "else_next":"addRange"
+            }
+        },
+        {
+            "name": "updateObjectForRange",
+            "comment": "Update the existing object in Check Point for MODIFY event.",
+            "parse": "JSON",
+            "operation": "POST",
+            "transport": {
+                "path": "/set-address-range"
+            },
+            "body_list": [
+                "{",
+                "\"name\": \"${L:A:OldStartIP}-${L:A:OldEndIP}\", \"new-name\": \"${L:A:StartIP}-${L:A:EndIP}\", \"ip-address-first\": \"${L:A:StartIP}\",  \"ip-address-last\": \"${L:A:EndIP}\"",
+                "}"
+            ]
+        },
+        {
+            "name": "endModifyRange",
+            "comment": "Go to skipDeletingIfAdding for RANGE ipv4 event",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "1",
+                    "op": "==",
+                    "right": "1"
+                }],
+                "next": "skipDeletingIfAdding"
+            }
+        },
+ 
+        
+
+
+        {
+            "name": "addRange",
+            "comment": "START OF CHECK POINT WEB API ADD OR DELETE STEPS ----- add Range of addresses to Check Point",
+            "parse": "JSON",
+            "operation": "POST",
+            "transport": {
+                "path": "/add-address-range"
+            },
+            "body_list": [
+                "{",
+                "\"name\": \"${L:A:StartIP}-${L:A:EndIP}\", \"ip-address-first\":\"${L:A:StartIP}\", \"ip-address-last\": \"${L:A:EndIP}\", \"groups\": [ \"CP_AssetGroup\" ]",
+                "}"
+            ]
+        },
+        {
+            "name": "goto",
+            "comment": "Go to skipDeletingIfAdding for RANGE ipv4 event",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "1",
+                    "op": "==",
+                    "right": "1"
+                }],
+                "next": "skipDeletingIfAdding"
+            }
+        },
+        {
+            "name": "removeRangeFromGroup",
+            "comment": "Removes Range from Asset group prior to deletion in Check Point.",
+            "parse": "JSON",
+            "operation": "POST",
+            "transport": {
+                "path": "/set-group"
+            },
+            "body_list": [
+                "{",
+                "\"name\": \"CP_AssetGroup\",",
+                "\"members\":",
+                "{",
+                "\"remove\": \"${L:A:StartIP}-${L:A:EndIP}\"",
+                "}",
+                "}"
+            ]
+        },
+        {
+            "name": "deleteRange",
+            "parse": "JSON",
+            "operation": "POST",
+            "transport": {
+                "path": "/delete-address-range"
+            },
+            "body_list": [
+                "{",
+                "\"name\": \"${L:A:StartIP}-${L:A:EndIP}\"",
+                "}"
+            ]
+        },
+        {
+            "name": "goto1",
+            "comment": "Go to Publish to complete RANGE deletion",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "1",
+                    "op": "==",
+                    "right": "1"
+                }],
+                "next": "forcePublish"
+            }
+        },
+        {
+            "name": "addNetwork",
+            "parse": "JSON",
+            "operation": "POST",
+            "transport": {
+                "path": "/add-network"
+            },
+            "body_list": [
+                "{",
+                "\"name\": \"${L:A:NetCiDR[0]}/${L:A:NetCiDR[1]}\", \"subnet\":\"${L:A:NetCiDR[0]}\", \"mask-length\": \"${L:A:NetCiDR[1]}\",  \"groups\": [ \"CP_AssetGroup\" ]",
+                "}"
+            ]
+        },
+        {
+            "name": "goto2",
+            "comment": "Go to skipDeletingIfAdding for NETWORK ipv4 event",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "1",
+                    "op": "==",
+                    "right": "1"
+                }],
+                "next": "skipDeletingIfAdding"
+            }
+        },
+        {
+            "name": "removeNetworkFromGroup",
+            "comment": "Removes Network from Asset group prior to deletion in Check Point.",
+            "parse": "JSON",
+            "operation": "POST",
+            "transport": {
+                "path": "/set-group"
+            },
+            "body_list": [
+                "{",
+                "\"name\": \"CP_AssetGroup\",",
+                "\"members\":",
+                "{",
+                "\"remove\": \"${L:A:NetCiDR[0]}/${L:A:NetCiDR[1]}\"",
+                "}",
+                "}"
+            ]
+        },
+        {
+            "name": "deleteNetwork",
+            "parse": "JSON",
+            "operation": "POST",
+            "transport": {
+                "path": "/delete-network"
+            },
+            "body_list": [
+                "{",
+                "\"name\": \"${L:A:NetCiDR[0]}/${L:A:NetCiDR[1]}\"",
+                "}"
+            ]
+        },
+        {
+            "name": "goto4",
+            "comment": "Go to forcePublish to complete NETWORK deletion",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "1",
+                    "op": "==",
+                    "right": "1"
+                }],
+                "next": "forcePublish"
+            }
+        },
+        {
+            "name": "addAddress",
+            "comment": "Add address to CP_AssetGroup in Check Point.",
+            "parse": "JSON",
+            "operation": "POST",
+            "transport": {
+                "path": "/add-host"
+            },
+            "body_list": [
+                "{",
+                "\"name\": \"${L:A:ThisObject}\", \"ip-address\":\"${L:A:ThisIP}\", \"groups\": [ \"CP_AssetGroup\" ]",
+                "}"
+            ]
+        },
+        {
+            "name": "skipDeletingIfAdding",
+            "comment": "Check for INSERT. We don't want to delete an address if we are inserting.",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "OR",
+                "statements": [{
+                        "left": "${E::operation_type}",
+                        "op": "==",
+                        "right": "INSERT"
+                    },
+                    {
+                        "left": "${E::binding_state}",
+                        "op": "==",
+                        "right": "ACTIVE"
+                    },
+                    {
+                        "left": "${E::operation_type}",
+                        "op": "==",
+                        "right": "MODIFY"
+                    }
+                ],
+                "next": "forcePublish"
+            }
+        },
+        {
+            "name": "removeFromGroup",
+            "comment": "Removes object from Asset group prior to deletion in Check Point.",
+            "parse": "JSON",
+            "operation": "POST",
+            "transport": {
+                "path": "/set-group"
+            },
+            "body_list": [
+                "{",
+                "\"name\": \"CP_AssetGroup\",",
+                "\"members\":",
+                "{",
+                "\"remove\": \"${L:A:ThisObject}\"",
+                "}",
+                "}"
+            ]
+        },
+        {
+            "name": "deleteAddress",
+            "comment": "Delete specified object in CP_AssetGroup in Check Point.",
+            "parse": "JSON",
+            "operation": "POST",
+            "transport": {
+                "path": "/delete-host"
+            },
+            "body_list": [
+                "{",
+                "\"name\": \"${L:A:ThisObject}\"",
+                "}"
+            ]
+        },
+        {
+            "name": "forcePublish",
+            "comment": "Publish any changes in Check Point",
+            "parse": "JSON",
+            "operation": "POST",
+            "transport": {
+                "path": "/publish"
+            },
+            "body_list": [
+                "{",
+                "}"
+            ]
+        },
+        {
+            "name": "skipTimestampUpdatingIfDeleting",
+            "comment": "Check for INSERT or ACTIVE lease state. We don't care about updating the timestamps if DELETING.",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "OR",
+                "statements": [{
+                        "left": "${E:A:values{extattrs}{CP_AssetSync}{value}}",
+                        "op": "==",
+                        "right": "true"
+                    },
+                    {
+                        "left": "${E::operation_type}",
+                        "op": "==",
+                        "right": "MODIFY"
+                    },
+                    {
+                        "left": "${E::binding_state}",
+                        "op": "==",
+                        "right": "ACTIVE"
+                    }
+                ],
+                "else_stop": true
+            }
+        },
+
+
+
+        {
+            "name": "skipGet_HostrefIfLease",
+            "comment": "START OF LEASE/DISCOVERY _ref STEPS ----- Check for LEASE or DISCOVERY event_type. If true, jump to _ref steps for Discovery and Lease",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "OR",
+                "statements":[{
+                        "left": "${E:A:event_type}",
+                        "op": "=~",
+                        "right": "LEASE"
+                    },
+                    {
+                        "left": "${E:A:event_type}",
+                        "op": "=~",
+                        "right": "DISCOVERY"
+                    }
+                ],
+                "else_next": "skipGet_HostrefIfFixed"
+            }
+        },
+        {
+            "name": "checkIPv6DiscoveryAndLease",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "OR",
+                "statements": [{
+                    "left": "${E:A:values{ipv6addr}}",
+                    "op": "==",
+                    "right": ""
+                }],
+                "eval": "${XC:ASSIGN:{L:IPReq}:{S:ipv4address}}",
+                "else_eval": "${XC:ASSIGN:{L:IPReq}:{S:ipv6address}}"
+            }
+        },
+        {
+            "name": "Start_To_Get_Ref_For_Lease_or_Discovery",
+            "operation": "GET",
+            "transport": {
+                "path": "${L:U:IPReq}?ip_address=${L:A:ThisIP}&network_view=${L:U:network_view}&_return_fields=discovered_data,status,network,types,ip_address,mac_address,lease_state,usage,objects"
+            },
+            "wapi": "v2.7"
+        },
+        {
+            "name": "check_if_we_have_an_object_for_Lease_or_Discovery",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "${P:A:PARSE[0]{types}[0]}",
+                    "op": "!=",
+                    "right": "UNMANAGED"
+                }],
+                "eval": "${XC:COPY:{L:Obj_refs}:{P:PARSE[0]{objects}}}",
+                "else_next": "isEmptyLeaseTimestamp"
+            }
+        },
+        {
+            "name": "Check_if_an_object_list_is_empty_for_Lease_or_Discovery",
+            "operation": "CONDITION",
+            "condition": {
+                "statements": [{
+                    "left": "${L:L:Obj_refs}",
+                    "op": "==",
+                    "right": "0"
+                }],
+                "condition_type": "AND",
+                "stop": true
+            }
+        },
+        {
+            "name": "Pop_object_from_the_list_for_Lease_or_Discovery",
+            "operation": "VARIABLEOP",
+            "variable_ops": [{
+                "operation": "POP",
+                "type": "SINGLE",
+                "destination": "L:Ref",
+                "source": "L:Obj_refs"
+            }]
+        },
+        {
+            "name": "DebugL_For_Loop_2",
+            "operation": "NOP",
+            "body": "${XC:DEBUG:{L:}}"
+        },
+        {
+            "name": "check_an_obj_type_for_Lease_or_Discovery",
+            "operation": "CONDITION", 
+            "condition": {
+                "condition_type": "OR",
+                "statements": [{
+                        "left": "${L:A:Ref}",
+                        "op": "=~",
+                        "right": "record:host.*"
+                    },
+                    {
+                        "left": "${L:A:Ref}",
+                        "op": "=~",
+                        "right": "fixedaddress.*"
+                    },
+                    {
+                        "left": "${L:A:Ref}",
+                        "op": "=~",
+                        "right": "ipv6fixedaddress.*"
+                    }
+                ],
+                "next":"isEmptyLeaseTimestamp",
+                "eval": "${XC:COPY:{L:Obj_ref}:{L:Ref}}",
+                "else_next": "Check_if_an_object_list_is_empty_for_Lease_or_Discovery"
+            }
+        },
+
+
+
+
+        {
+            "name": "skipGet_HostrefIfFixed",
+            "comment": "START OF FIXED, NETWORK, AND RANGE _ref STEPS ----- Check for FIXED, NETWORK, or RANGE event type and copy _ref from E: namespace.",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "OR",
+                "statements": [{
+                        "left": "${E:A:event_type}",
+                        "op": "=~",
+                        "right": "FIXED"
+                    },
+                    {
+                        "left": "${E:A:event_type}",
+                        "op": "=~",
+                        "right": "NETWORK"
+                    },
+                    {
+                        "left": "${E:A:event_type}",
+                        "op": "=~",
+                        "right": "RANGE"
+                    }
+                ],
+                "eval": "${XC:COPY:{L:Obj_ref}:{E:values{_ref}}}",
+                "next": "isEmpty_ref"
+            }
+        },
+        {
+            "name": "getHost_ref",
+            "comment": "Get host object ref for this IP. We must do this for HOSTS because there are separate refs to HOSTS - one for the host itself, and the rest for the IPs on it. We need to get the host object itself. <Can get same value by doing getIPData -> {objects} and looking at record:host...>",
+            "operation": "GET",
+            "wapi": "v2.7",
+            "transport": {
+                "path": "record:host?${L:A:IPvTypeForRef}=${L:A:ThisIP}&network_view=${E:A:values{network_view}}&*CP_AssetSync=true&*CP_AssetTimestamp!="
+            }
+        },
+        {
+            "name": "setObj_refHost",
+            "comment": "Set _ref to a local so comparing the variable next step works with other events too.",
+            "operation": "NOP",
+            "body": "${XC:COPY:{L:Obj_ref}:{P:PARSE[0]{_ref}}"
+        },
+        {
+            "name": "isEmpty_ref",
+            "comment": "Verify _ref is not empty, or that operation is DELETE",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "OR",
+                "statements": [
+                    {
+                        "left": "${L:A:Obj_ref}",
+                        "op": "==",
+                        "right": ""
+                    },
+                    {
+                        "left": "${E::operation_type}",
+                        "op": "==",
+                        "right": "DELETE"
+                    }
+                ],
+                "stop": true
+            }
+        },
+        {
+            "name": "isEmptyLeaseTimestamp",
+            "comment": "Only when the CP_AssetTimestamp EA is empty should we update its timestamp for a LEASE event.",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                        "left": "${E:A:event_type}",
+                        "op": "==",
+                        "right": "LEASE"
+                    },
+                    {
+                        "left": "${E:A:ip.extattrs{CP_AssetTimestamp}}",
+                        "op": "!=",
+                        "right": ""
+                    }
+                ],
+                "stop": true
+            }
+        },
+
+
+
+
+        {
+            "name": "updateCP_AssetTimestamp",
+            "comment": "Use the Obj_ref local as the path to update the CP_AssetTimestamp EA of added asset when syncing.",
+            "operation": "PUT",
+            "wapi": "v2.7",
+            "wapi_quoting": "JSON",
+            "transport": {
+                "path": "${L:A:Obj_ref}"
+            },
+            "body_list": [
+                "{\"extattrs+\":{\"CP_AssetTimestamp\":{\"value\":\"${L:A:timestamp}\"}}}"
+            ]
+        },
+        {
+            "name": "haltTemplate",
+            "comment": "Halt template cleanly.",
+            "operation": "CONDITION",
+            "condition": {
+                "condition_type": "AND",
+                "statements": [{
+                    "left": "1",
+                    "op": "==",
+                    "right": "1"
+                }],
+                "stop": true
+            }
+        }
+    ]
+}

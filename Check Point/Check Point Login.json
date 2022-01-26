@@ -1,0 +1,48 @@
+{
+	"name": "Check Point Login",
+	"comment": "Login to Check Point Console to grab the sid.",
+	"vendor_identifier": "Check Point",
+	"version": "5.0",
+	"content_type": "application/json",
+	"quoting": "XMLA",
+	"type": "REST_EVENT",
+	"event_type": ["SESSION"],
+	"steps": 
+	[
+		{
+			"name": "removeBasicAuthHeaders",
+			"body": "${XC:ASSIGN:{H:Authorization}:{S:}}${XC:ASSIGN:{S:SID}:{S:}}",
+			"operation": "NOP"
+		},      
+		{
+            "name": "login",
+            "operation": "POST",
+            "parse": "JSON",
+			"no_connection_debug": false,
+            "transport": {
+                "path": "/login"
+            },
+            "body_list": [
+                "{",
+                    " \"user\": \"${UT::USERNAME}\", \"password\": \"${UT::PASSWORD}\"",
+                "}"
+            ]
+        },
+		{
+            "name": "copySid",
+            "comment":"Copy sid to the sid session variable.",
+            "operation": "CONDITION",        
+            "condition": {
+                "condition_type": "AND",
+				"statements":
+					[{
+                        "right": "${P:A:sid}",
+                        "op": "!=",
+                        "left": ""
+					}],
+				"eval": "${XC:COPY:{S:SID}:{P:sid}",
+				"else_error": true
+			}
+		}
+	]
+}
