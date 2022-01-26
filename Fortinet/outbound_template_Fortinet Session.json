@@ -11,7 +11,6 @@
 	"retry": 0,
 	"retry_template": 0,
 	"timeout": 60,
-	"vendor_identifier": "Fortinet",
 	"logout_only_at_template_end": true,
 	    "endpoint_variables": [
         {
