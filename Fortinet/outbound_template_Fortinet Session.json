@@ -1,0 +1,23 @@
+{
+	"name": "Fortinet Session",
+	"comment": "Fortinet Session",
+	"vendor_identifier": "Fortinet",
+	"version": "3.0",
+	"type": "REST_ENDPOINT",
+	"inactivity_interval": 1000,
+	"keepalive": true,
+	"override_path": true,
+	"path": "",
+	"retry": 0,
+	"retry_template": 0,
+	"timeout": 60,
+	"vendor_identifier": "Fortinet",
+	"logout_only_at_template_end": true,
+	    "endpoint_variables": [
+        {
+            "name": "Token",
+            "type": "STRING",
+            "value": "3Gkw7yH069h9yzbH3yqtb0fbQf4w0H"
+        }
+    ]
+}
